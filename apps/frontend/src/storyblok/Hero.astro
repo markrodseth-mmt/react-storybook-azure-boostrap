@@ -1,0 +1,79 @@
+---
+import { storyblokEditable } from "@storyblok/astro";
+
+const { blok } = Astro.props;
+---
+
+<section class="hero" {...storyblokEditable(blok)}>
+  {
+    blok.background_image?.filename && (
+      <img
+        class="hero__bg"
+        src={`${blok.background_image.filename}/m/1600x0`}
+        alt={blok.background_image.alt ?? ""}
+        loading="eager"
+      />
+    )
+  }
+  <div class="hero__content">
+    {blok.headline && <h1>{blok.headline}</h1>}
+    {blok.subheadline && <p class="hero__sub">{blok.subheadline}</p>}
+    {
+      blok.cta_label && blok.cta_link?.cached_url && (
+        <a class="hero__cta" href={`/${blok.cta_link.cached_url}`}>
+          {blok.cta_label}
+        </a>
+      )
+    }
+  </div>
+</section>
+
+<style>
+  .hero {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 60vh;
+    padding: 4rem 2rem;
+    color: #fff;
+    text-align: center;
+    background: #1a1a2e;
+    overflow: hidden;
+  }
+  .hero__bg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0.4;
+  }
+  .hero__content {
+    position: relative;
+    max-width: 640px;
+  }
+  .hero__content h1 {
+    font-size: clamp(2rem, 5vw, 3.5rem);
+    font-weight: 800;
+    margin-bottom: 1rem;
+  }
+  .hero__sub {
+    font-size: 1.25rem;
+    margin-bottom: 2rem;
+    opacity: 0.9;
+  }
+  .hero__cta {
+    display: inline-block;
+    padding: 0.75rem 2rem;
+    background: #fff;
+    color: #1a1a2e;
+    border-radius: 6px;
+    text-decoration: none;
+    font-weight: 600;
+    transition: opacity 0.2s;
+  }
+  .hero__cta:hover {
+    opacity: 0.85;
+  }
+</style>

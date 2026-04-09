@@ -1,0 +1,38 @@
+---
+import { storyblokEditable, renderRichText } from "@storyblok/astro";
+
+const { blok } = Astro.props;
+const renderedHtml = blok.content ? renderRichText(blok.content) : "";
+---
+
+<section class="richtext" {...storyblokEditable(blok)}>
+  <div class="richtext__inner" set:html={renderedHtml} />
+</section>
+
+<style>
+  .richtext {
+    padding: 3rem 2rem;
+  }
+  .richtext__inner {
+    max-width: 720px;
+    margin: 0 auto;
+  }
+  .richtext__inner :global(h2) {
+    font-size: 1.75rem;
+    margin: 2rem 0 1rem;
+  }
+  .richtext__inner :global(h3) {
+    font-size: 1.35rem;
+    margin: 1.5rem 0 0.75rem;
+  }
+  .richtext__inner :global(p) {
+    margin-bottom: 1rem;
+  }
+  .richtext__inner :global(ul),
+  .richtext__inner :global(ol) {
+    margin: 1rem 0 1rem 1.5rem;
+  }
+  .richtext__inner :global(a) {
+    color: #2563eb;
+  }
+</style>

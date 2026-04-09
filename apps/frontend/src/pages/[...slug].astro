@@ -1,0 +1,25 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { useStoryblokApi } from "@storyblok/astro";
+import StoryblokComponent from "@storyblok/astro/StoryblokComponent.astro";
+
+const storyblokApi = useStoryblokApi();
+
+const slug = Astro.params.slug ?? "home";
+
+let story;
+try {
+  const { data } = await storyblokApi.get(`cdn/stories/${slug}`, {
+    version: import.meta.env.DEV ? "draft" : "published",
+  });
+  story = data.story;
+} catch {
+  return Astro.redirect("/404");
+}
+
+const title = story.content?.seo_title || story.name;
+---
+
+<Layout title={title}>
+  <StoryblokComponent blok={story.content} />
+</Layout>

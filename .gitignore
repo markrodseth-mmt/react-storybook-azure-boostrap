@@ -1,0 +1,29 @@
+# Terraform
+**/.terraform/
+**/*.tfplan
+**/*.tfstate
+**/*.tfstate.*
+**/crash.log
+**/override.tf
+**/override.tf.json
+**/*_override.tf
+**/*_override.tf.json
+
+# Secrets — never commit these
+terraform/environments/prod/terraform.tfvars
+terraform/environments/*/terraform.tfvars.sensitive
+.env
+.env.*
+
+# Node / Frontend
+**/node_modules/
+**/dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
