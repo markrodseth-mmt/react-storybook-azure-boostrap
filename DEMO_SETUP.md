@@ -1,6 +1,6 @@
 # Demo Site Setup Guide
 
-Step-by-step walkthrough to deploy the Quadient reference architecture into an Azure subscription and get a working demo site.
+Step-by-step walkthrough to deploy the reference architecture into an Azure subscription and get a working demo site.
 
 ---
 

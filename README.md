@@ -1,6 +1,6 @@
-# Quadient Bootstrap
+# Bootstrap
 
-Terraform infrastructure-as-code for the Quadient reference architecture on Azure: Front Door Premium, App Services (NGINX + Frontend + Backend), Redis, AI Search, Function App — all private-networked via VNet and Private Endpoints.
+Terraform infrastructure-as-code for the reference architecture on Azure: Front Door Premium, App Services (NGINX + Frontend + Backend), Redis, AI Search, Function App — all private-networked via VNet and Private Endpoints.
 
 ---
 
@@ -273,7 +273,7 @@ The module handles HTTPS enforcement, TLS, VNet integration, Front Door IP restr
 ## Project Structure
 
 ```
-quadient-bootstrap/
+bootstrap/
 ├── apps/
 │   └── frontend/                    # Astro + React + Storyblok frontend
 │       ├── src/
