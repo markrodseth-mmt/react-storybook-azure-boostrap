@@ -7,37 +7,10 @@ Azure Front Door Premium, App Services (NGINX + Frontend + Backend), Redis, AI S
 
 ## Architecture
 
-```
-Internet --> Azure Front Door Premium (WAF + CDN + DDoS)
-                |
-                | Private Link
-                |
-       +--------+--------+
-       |        |        |
-   /api/*   /r/*,     /*
-       |   /redirect/*   |
-       |        |        |
-   Backend   NGINX   Frontend
-   (.NET)  (redirects) (Astro+Storyblok)
-       |                 |
-       +--------+--------+
-                |
-        VNet (Private Endpoints)
-                |
-    +-----------+-----------+
-    |           |           |
-  Redis    AI Search    Key Vault
-    |
-  Function App
-  (Data Sync)
-    |
-  Storage Account
-```
-
 All services sit behind private endpoints inside a VNet. No public endpoints are exposed.
 Azure Front Door reaches App Services via Private Link (AFD Premium integration).
 
-### Architecture Overview
+### Overview
 
 ```mermaid
 flowchart TD
