@@ -37,6 +37,180 @@ Internet --> Azure Front Door Premium (WAF + CDN + DDoS)
 All services sit behind private endpoints inside a VNet. No public endpoints are exposed.
 Azure Front Door reaches App Services via Private Link (AFD Premium integration).
 
+### Architecture Overview
+
+```mermaid
+flowchart TD
+    Internet(["Internet"])
+
+    subgraph AFD["Azure Front Door Premium"]
+        WAF["WAF Policy\nDetection (dev) / Prevention (prod)\nOWASP 2.1 + BotManager 1.1"]
+        CDN["CDN + DDoS Protection"]
+    end
+
+    Internet --> AFD
+
+    subgraph AppServices["App Services — rg-{prefix}-main"]
+        direction TB
+
+        subgraph PlanNGINX["App Service Plan: NGINX (P1v3/P3v3)"]
+            NGINX["NGINX App Service\napp-{prefix}-nginx\nRoutes: /r/* /redirect/*"]
+        end
+
+        subgraph PlanApps["App Service Plan: Apps (P1v3/P2v3)"]
+            Frontend["Frontend App Service\napp-{prefix}-frontend\nAstro + Storyblok SSR\nRoute: /* (catch-all)"]
+            Backend["Backend App Service\napp-{prefix}-backend\n.NET Minimal API\nRoute: /api/*"]
+        end
+    end
+
+    AFD -- "Private Link\n/r/* /redirect/*" --> NGINX
+    AFD -- "Private Link\n/*" --> Frontend
+    AFD -- "Private Link\n/api/*" --> Backend
+
+    subgraph DataLayer["Data Layer — VNet Private Endpoints"]
+        Redis["Redis Cache\nStandard C0/C1"]
+        Search["Azure AI Search\nBasic/Standard"]
+        KeyVault["Key Vault\nStandard (RBAC)"]
+        FuncApp["Function App\nElastic Premium EP1\nData Sync (Contentful webhook)"]
+        Storage["Storage Account\nFunction App runtime"]
+        ACR["ACR Premium\nGeo-replicated to ukwest"]
+    end
+
+    Backend -- "Private Endpoint" --> Redis
+    Backend -- "Private Endpoint" --> Search
+    Backend -- "@Microsoft.KeyVault() refs" --> KeyVault
+    FuncApp -- "Updates index" --> Search
+    FuncApp -- "Invalidates cache" --> Redis
+    FuncApp -- "@Microsoft.KeyVault() refs" --> KeyVault
+    FuncApp --> Storage
+    NGINX & Frontend & Backend & FuncApp -- "AcrPull (MI)" --> ACR
+
+    subgraph Monitoring["Monitoring"]
+        LAW["Log Analytics Workspace\n30-day retention"]
+        AppInsights["Application Insights\nworkspace-based"]
+    end
+
+    AFD & NGINX & Frontend & Backend & FuncApp & Redis & Search & KeyVault --> LAW
+    LAW --> AppInsights
+```
+
+### Network Topology
+
+```mermaid
+flowchart TD
+    subgraph RG_NET["rg-{prefix}-networking"]
+        subgraph VNet["VNet: vnet-{prefix}\n10.0.0.0/16 (dev)  |  10.1.0.0/16 (prod)"]
+
+            subgraph SNET_APP["snet-{prefix}-app-services  10.x.1.0/24\nDelegated: Microsoft.Web/serverFarms"]
+                NSG["NSG: nsg-{prefix}-app-services"]
+                NGINX_PE["NGINX App Service\n(VNet-integrated)"]
+                FE_PE["Frontend App Service\n(VNet-integrated)"]
+                BE_PE["Backend App Service\n(VNet-integrated)"]
+            end
+
+            subgraph SNET_PE["snet-{prefix}-private-endpoints  10.x.2.0/24\nPrivate endpoint network policies: Disabled"]
+                PE_NGINX["PE: App Service NGINX"]
+                PE_FE["PE: App Service Frontend"]
+                PE_BE["PE: App Service Backend"]
+                PE_FUNC["PE: Function App"]
+                PE_ACR["PE: ACR"]
+                PE_REDIS["PE: Redis"]
+                PE_SEARCH["PE: AI Search"]
+                PE_KV["PE: Key Vault"]
+                PE_BLOB["PE: Storage (blob)"]
+                PE_QUEUE["PE: Storage (queue)"]
+                PE_TABLE["PE: Storage (table)"]
+                PE_FILE["PE: Storage (file)"]
+            end
+
+            subgraph SNET_FUNC["snet-{prefix}-functions  10.x.4.0/24\nDelegated: Microsoft.Web/serverFarms"]
+                FUNC_APP["Function App\n(VNet-integrated)"]
+            end
+
+            subgraph SNET_DEVOPS["snet-{prefix}-devops-agents  10.x.3.0/24\n(Reserved for future use)"]
+                DEVOPS["-- reserved --"]
+            end
+        end
+
+        subgraph DNS["Private DNS Zones (linked to VNet)"]
+            DNS1["privatelink.azurewebsites.net"]
+            DNS2["privatelink.azurecr.io"]
+            DNS3["privatelink.redis.cache.windows.net"]
+            DNS4["privatelink.search.windows.net"]
+            DNS5["privatelink.blob.core.windows.net"]
+            DNS6["privatelink.queue.core.windows.net"]
+            DNS7["privatelink.table.core.windows.net"]
+            DNS8["privatelink.file.core.windows.net"]
+            DNS9["privatelink.vaultcore.azure.net"]
+        end
+    end
+
+    subgraph RG_MAIN["rg-{prefix}-main  (services)"]
+        AFD_SVC["Azure Front Door Premium"]
+        NGINX_SVC["NGINX App Service"]
+        FE_SVC["Frontend App Service"]
+        BE_SVC["Backend App Service"]
+        FUNC_SVC["Function App"]
+        ACR_SVC["ACR Premium"]
+        REDIS_SVC["Redis Cache"]
+        SEARCH_SVC["AI Search"]
+        KV_SVC["Key Vault"]
+        ST_SVC["Storage Account"]
+    end
+
+    NSG -- "AllowHTTPS from AzureFrontDoor.Backend\nAllowVNetInbound\nAllowAzureLoadBalancer\nDenyDirectInternet" --> SNET_APP
+
+    AFD_SVC -- "Private Link (AFD Premium)" --> PE_NGINX & PE_FE & PE_BE
+
+    PE_NGINX --> NGINX_SVC
+    PE_FE --> FE_SVC
+    PE_BE --> BE_SVC
+    PE_FUNC --> FUNC_SVC
+    PE_ACR --> ACR_SVC
+    PE_REDIS --> REDIS_SVC
+    PE_SEARCH --> SEARCH_SVC
+    PE_KV --> KV_SVC
+    PE_BLOB & PE_QUEUE & PE_TABLE & PE_FILE --> ST_SVC
+```
+
+### Identity & Access (RBAC)
+
+```mermaid
+flowchart LR
+    subgraph Identities["System-Assigned Managed Identities"]
+        MI_NGINX["NGINX\nManaged Identity"]
+        MI_FE["Frontend\nManaged Identity"]
+        MI_BE["Backend\nManaged Identity"]
+        MI_FUNC["Function App\nManaged Identity"]
+        MI_DEPLOYER["Deployer\n(user / SP)"]
+    end
+
+    subgraph Resources["Target Resources"]
+        ACR_R["ACR Premium\nacr*"]
+        KV_R["Key Vault\nkv-{prefix}-{env}"]
+        KV_SEC["Key Vault Secrets\n• azure-search-key\n• redis-connection-string"]
+    end
+
+    MI_NGINX -- "AcrPull" --> ACR_R
+    MI_FE -- "AcrPull" --> ACR_R
+    MI_BE -- "AcrPull" --> ACR_R
+    MI_FUNC -- "AcrPull" --> ACR_R
+
+    MI_BE -- "Key Vault Secrets User" --> KV_R
+    MI_FUNC -- "Key Vault Secrets User" --> KV_R
+    MI_DEPLOYER -- "Key Vault Administrator" --> KV_R
+
+    KV_R --> KV_SEC
+
+    subgraph SecretRefs["App Setting References\n(@Microsoft.KeyVault())"]
+        BE_REF["Backend App Service\napp settings"]
+        FUNC_REF["Function App\napp settings"]
+    end
+
+    KV_SEC -- "secret reference" --> BE_REF
+    KV_SEC -- "secret reference" --> FUNC_REF
+```
+
 ---
 
 ## What Gets Created
