@@ -1,14 +1,12 @@
-# Bootstrap Azure Infrastructure Bootstrap
+# Quadient Bootstrap
 
-Terraform bootstrap and CLI for the Bootstrap reference architecture:
-Azure Front Door Premium, App Services (NGINX + Frontend + Backend), Redis, AI Search, Function App -- all private-networked via VNet + Private Endpoints.
+Terraform infrastructure-as-code for the Quadient reference architecture on Azure: Front Door Premium, App Services (NGINX + Frontend + Backend), Redis, AI Search, Function App — all private-networked via VNet and Private Endpoints.
 
 ---
 
 ## Architecture
 
-All services sit behind private endpoints inside a VNet. No public endpoints are exposed.
-Azure Front Door reaches App Services via Private Link (AFD Premium integration).
+All services sit behind private endpoints inside a VNet. No public endpoints are exposed. Azure Front Door reaches App Services via Private Link (AFD Premium integration).
 
 ### Overview
 
@@ -161,7 +159,7 @@ flowchart LR
     subgraph Resources["Target Resources"]
         ACR_R["ACR Premium\nacr*"]
         KV_R["Key Vault\nkv-{prefix}-{env}"]
-        KV_SEC["Key Vault Secrets\n• azure-search-key\n• redis-connection-string"]
+        KV_SEC["Key Vault Secrets\n- azure-search-key\n- redis-connection-string"]
     end
 
     MI_NGINX -- "AcrPull" --> ACR_R
@@ -188,32 +186,32 @@ flowchart LR
 
 ## Module Architecture
 
-The Terraform codebase is built on **standardised, reusable building-block modules** that bake in best practices as defaults. Service modules compose these building blocks, and the root module wires everything together. This design means AI-assisted infrastructure changes operate at the composition level rather than freestyling raw provider syntax.
+The Terraform codebase uses standardised, reusable building-block modules with production best practices baked in as defaults. Service modules compose these building blocks. The root module wires everything together.
 
 ### Building Blocks
 
-| Module | Purpose | Baked-in Defaults |
-|--------|---------|-------------------|
+| Module | Purpose | Defaults |
+|--------|---------|----------|
 | `private_endpoint` | Private Link + DNS registration | Automatic DNS zone group, standardised naming |
-| `diagnostic_setting` | Log Analytics diagnostic shipping | AllMetrics enabled by default |
-| `linux_web_app` | Opinionated App Service | HTTPS-only, always-on, VNet route-all, Front Door IP restriction, ACR pull via managed identity, private endpoint, App Insights |
+| `diagnostic_setting` | Log Analytics diagnostic shipping | AllMetrics enabled |
+| `linux_web_app` | Opinionated App Service | HTTPS-only, TLS 1.2+, FTPS disabled, always-on, default-deny IP restrictions (Front Door only), SCM/Kudu locked down, VNet route-all, ACR pull via managed identity, private endpoint, App Insights |
 
 ### Service Modules
 
 | Module | Composes | Purpose |
 |--------|----------|---------|
-| `networking` | — | VNet, subnets, NSGs, Private DNS Zones |
+| `networking` | -- | VNet, subnets, NSGs, Private DNS Zones |
 | `container_registry` | `private_endpoint` | ACR Premium + geo-replication |
-| `redis` | `private_endpoint` | Redis Cache with security defaults |
+| `redis` | `private_endpoint` | Redis Cache |
 | `search` | `private_endpoint` | Azure AI Search |
 | `key_vault` | `private_endpoint` | Key Vault (RBAC-enabled) |
-| `function_app` | `private_endpoint` (×5) | Data Sync Function App + storage |
-| `front_door` | — | AFD Premium, WAF, CDN, routes, custom domains |
-| `monitoring` | `diagnostic_setting` (×N) | Log Analytics + App Insights + all diagnostics |
+| `function_app` | `private_endpoint` (x5) | Data Sync Function App + storage |
+| `front_door` | -- | AFD Premium, WAF, CDN, routes, custom domains |
+| `monitoring` | `diagnostic_setting` (xN) | Log Analytics + App Insights + all diagnostics |
 
 ### Adding a New Web App
 
-To add a new service, add a single module call in `main.tf`:
+Add a single module call in `main.tf`:
 
 ```hcl
 module "my_new_service" {
@@ -241,7 +239,7 @@ module "my_new_service" {
 }
 ```
 
-The module handles HTTPS enforcement, VNet integration, Front Door IP restrictions, ACR pull permissions, private endpoint creation, DNS registration, and App Insights — no boilerplate needed.
+The module handles HTTPS enforcement, TLS, VNet integration, Front Door IP restrictions, ACR pull permissions, private endpoint creation, DNS registration, and App Insights automatically.
 
 ---
 
@@ -249,53 +247,33 @@ The module handles HTTPS enforcement, VNet integration, Front Door IP restrictio
 
 | Resource | Name Pattern | SKU (dev / prod) | Purpose |
 |----------|-------------|-------------------|---------|
-| Resource Groups | `rg-bootstrap-{env}-main`, `-networking` | -- | Resource organisation |
-| Virtual Network | `vnet-bootstrap-{env}` | -- | Private networking for all services |
-| Subnets (x4) | `snet-bootstrap-{env}-*` | -- | App Services, Private Endpoints, Functions |
-| NSGs | `nsg-bootstrap-{env}-app-services` | -- | Allow AFD + VNet only, deny internet |
+| Resource Groups | `rg-{project}-{env}-main`, `-networking` | -- | Resource organisation |
+| Virtual Network | `vnet-{project}-{env}` | -- | Private networking |
+| Subnets (x4) | `snet-{project}-{env}-*` | -- | App Services, Private Endpoints, Functions, DevOps |
+| NSGs | `nsg-{project}-{env}-app-services` | -- | Allow AFD + VNet only, deny internet |
 | Private DNS Zones | `privatelink.*.net` | -- | DNS resolution for private endpoints |
-| Azure Front Door | `afd-bootstrap-{env}` | Premium | Global load balancing, WAF, CDN, TLS |
+| Azure Front Door | `afd-{project}-{env}` | Premium | Global load balancing, WAF, CDN, TLS |
 | WAF Policy | `waf*policy` | Detection / Prevention | OWASP + Bot protection |
-| App Service Plan (NGINX) | `asp-bootstrap-{env}-nginx` | P1v3 / P3v3 | Dedicated plan for redirect workload |
-| App Service Plan (apps) | `asp-bootstrap-{env}-apps` | P1v3 / P2v3 | Shared plan for frontend + backend |
-| Web App (NGINX) | `app-bootstrap-{env}-nginx-*` | -- | High-volume redirects and routing rules |
-| Web App (Frontend) | `app-bootstrap-{env}-frontend-*` | -- | Astro + Storyblok SSR application |
-| Web App (Backend) | `app-bootstrap-{env}-backend-*` | -- | .NET minimal API with Fusion Cache |
+| App Service Plan (NGINX) | `asp-{project}-{env}-nginx` | P1v3 / P3v3 | Dedicated plan for redirect workload |
+| App Service Plan (Apps) | `asp-{project}-{env}-apps` | P1v3 / P2v3 | Shared plan for frontend + backend |
+| Web App (NGINX) | `app-{project}-{env}-nginx-*` | -- | Redirects and routing rules |
+| Web App (Frontend) | `app-{project}-{env}-frontend-*` | -- | Astro + Storyblok SSR |
+| Web App (Backend) | `app-{project}-{env}-backend-*` | -- | .NET minimal API |
 | Container Registry | `acr*` | Premium | Docker images with geo-replication |
-| Function App | `func-bootstrap-{env}-datasync-*` | Elastic Premium EP1 | Data synchronisation between systems |
+| Function App | `func-{project}-{env}-datasync-*` | Elastic Premium EP1 | Data synchronisation |
 | Storage Account | `st*fn*` | Standard LRS | Function App runtime storage |
-| Redis Cache | `redis-bootstrap-{env}` | Standard C0 / C1 | Application caching |
-| AI Search | `srch-bootstrap-{env}` | Basic / Standard | Full-text search |
-| Key Vault | `kv-bootstrap-{env}` | Standard | Secrets management (RBAC-enabled) |
-| Log Analytics | `law-bootstrap-{env}` | PerGB2018 | Centralised logging and diagnostics |
-
----
-
-## Prerequisites
-
-| Tool | Version | Install |
-|------|---------|---------|
-| [Terraform](https://developer.hashicorp.com/terraform/install) | >= 1.14 | `brew install terraform` |
-| [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) | >= 2.55 | `brew install azure-cli` |
-| [Infracost](https://www.infracost.io/docs/) | >= 0.10 | Optional -- cost estimation |
-
-Docker is **not** required. Container builds run remotely via ACR Tasks.
-
-### Required Azure Permissions
-
-The deploying identity (user or service principal) needs these roles on the target subscription:
-
-| Role | Why |
-|------|-----|
-| **Owner** (or Contributor + User Access Administrator) | Create resources and assign RBAC roles (ACR Pull, Key Vault) |
-| **Key Vault Administrator** | Auto-assigned by Terraform on the Key Vault for secret management |
+| Redis Cache | `redis-{project}-{env}` | Standard C0 / C1 | Application caching |
+| AI Search | `srch-{project}-{env}` | Basic / Standard | Full-text search |
+| Key Vault | `kv-{project}-{env}` | Standard | Secrets management (RBAC) |
+| Log Analytics | `law-{project}-{env}` | PerGB2018 | Centralised logging and diagnostics |
+| Application Insights | `appi-{project}-{env}` | -- | APM (workspace-based) |
 
 ---
 
 ## Project Structure
 
 ```
-bootstrap-bootstrap/
+quadient-bootstrap/
 ├── apps/
 │   └── frontend/                    # Astro + React + Storyblok frontend
 │       ├── src/
@@ -305,35 +283,29 @@ bootstrap-bootstrap/
 │       ├── Dockerfile               # Multi-stage build for ACR
 │       └── package.json
 │
-├── cli/
-│   └── infra                        # Unified CLI for all operations
-│
 └── terraform/
     ├── providers.tf                 # AzureRM v4 + AzureAD provider config
-    ├── variables.tf                 # All input variables
+    ├── variables.tf                 # Input variables (with validations)
     ├── main.tf                      # Root module — composes all modules
     ├── outputs.tf                   # Root outputs (URLs, endpoints)
+    ├── moved.tf                     # State migration blocks
     │
     ├── modules/
-    │   │
-    │   │── # ── Building Blocks (reusable primitives) ──────────
-    │   ├── private_endpoint/        # Private Link + DNS (used by all service modules)
-    │   ├── diagnostic_setting/      # Log Analytics diagnostic shipping
-    │   ├── linux_web_app/           # Opinionated App Service with all defaults baked in
-    │   │
-    │   │── # ── Service Modules (compose building blocks) ──────
+    │   ├── private_endpoint/        # Building block: Private Link + DNS
+    │   ├── diagnostic_setting/      # Building block: Log Analytics shipping
+    │   ├── linux_web_app/           # Building block: Opinionated App Service
     │   ├── networking/              # VNet, subnets, NSGs, Private DNS Zones
-    │   ├── front_door/              # AFD Premium, WAF, CDN, routes, custom domains
+    │   ├── front_door/              # AFD Premium, WAF, CDN, routes
     │   ├── container_registry/      # ACR Premium + geo-replication
-    │   ├── function_app/            # Data Sync Function App (Elastic Premium)
+    │   ├── function_app/            # Data Sync Function App
     │   ├── search/                  # Azure AI Search
     │   ├── redis/                   # Azure Redis Cache
-    │   ├── key_vault/               # Key Vault (RBAC-enabled)
+    │   ├── key_vault/               # Key Vault (RBAC)
     │   └── monitoring/              # Log Analytics + App Insights + diagnostics
     │
     └── environments/
         ├── dev/
-        │   ├── terraform.tfvars     # Dev-sized SKUs, WAF in Detection mode
+        │   ├── terraform.tfvars     # Dev SKUs, WAF in Detection mode
         │   └── backend.hcl          # Remote state backend pointer
         └── prod/
             ├── terraform.tfvars     # Production SKUs, WAF in Prevention mode
@@ -342,212 +314,170 @@ bootstrap-bootstrap/
 
 ---
 
-## First-time Setup (per client tenant)
+## Prerequisites
 
-### 1. Authenticate
+| Tool | Version | Install |
+|------|---------|---------|
+| [Terraform](https://developer.hashicorp.com/terraform/install) | >= 1.14 | `brew install terraform` |
+| [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) | >= 2.55 | `brew install azure-cli` |
 
-```bash
-./cli/infra login dev
-```
+Docker is **not** required. Container builds run remotely via ACR Tasks.
 
-### 2. Create remote state backend
+### Required Azure Permissions
 
-Creates a Storage Account (GRS, soft delete, resource lock) to hold `.tfstate` files.
+The deploying identity (user or service principal) needs:
 
-```bash
-./cli/infra bootstrap dev <subscription-id>
-```
+| Role | Why |
+|------|-----|
+| **Owner** (or Contributor + User Access Administrator) | Create resources and assign RBAC roles (ACR Pull, Key Vault) |
+| **Key Vault Administrator** | Auto-assigned by Terraform on the Key Vault for secret management |
 
-### 3. Update variables
+---
 
-Edit `terraform/environments/dev/terraform.tfvars`:
+## Common Commands
 
-```hcl
-subscription_id = "<client-subscription-id>"
-tenant_id       = "<client-tenant-id>"
-```
-
-### 4. Initialise Terraform
+### Terraform
 
 ```bash
-./cli/infra init dev
+# Initialise (dev)
+terraform -chdir=terraform init \
+  -backend-config=environments/dev/backend.hcl
+
+# Plan
+terraform -chdir=terraform plan \
+  -var-file=environments/dev/terraform.tfvars
+
+# Apply
+terraform -chdir=terraform apply \
+  -var-file=environments/dev/terraform.tfvars
+
+# Show outputs
+terraform -chdir=terraform output
+
+# Destroy (use with caution)
+terraform -chdir=terraform destroy \
+  -var-file=environments/dev/terraform.tfvars
 ```
 
-### 5. Plan
+### Container Images
 
 ```bash
-./cli/infra plan dev
+# Build and push via ACR Tasks (no local Docker needed)
+az acr build \
+  --registry <acr-name> \
+  --image frontend:v1.2.3 \
+  ./apps/frontend
+
+# List images
+az acr repository list --name <acr-name> -o table
 ```
 
-Review the plan output carefully, especially:
-- Private DNS Zone names (must not conflict with existing zones in the subscription)
-- Subnet address spaces (must not overlap with existing VNets if peered)
-- AFD WAF mode (`Detection` in dev, `Prevention` in prod)
-
-### 6. Apply
+### App Service Operations
 
 ```bash
-./cli/infra apply dev
+# Stream live logs
+az webapp log tail \
+  --resource-group rg-bootstrap-dev-main \
+  --name <app-name>
+
+# Restart
+az webapp restart \
+  --resource-group rg-bootstrap-dev-main \
+  --name <app-name>
+
+# SSH into container
+az webapp ssh \
+  --resource-group rg-bootstrap-dev-main \
+  --name <app-name>
 ```
 
-### 7. Set Storyblok credentials
-
-Storyblok secrets are managed outside of Terraform to avoid storing them in state:
+### Front Door
 
 ```bash
-./cli/infra secrets:set dev
+# Purge CDN cache
+az afd endpoint purge \
+  --resource-group rg-bootstrap-dev-main \
+  --profile-name afd-bootstrap-dev \
+  --endpoint-name fde-bootstrap-dev \
+  --content-paths "/*"
+```
+
+### Secrets
+
+```bash
+# Set Storyblok token on frontend App Service
+az webapp config appsettings set \
+  --resource-group rg-bootstrap-dev-main \
+  --name <frontend-app-name> \
+  --settings STORYBLOK_TOKEN="<token>"
 ```
 
 ---
 
-## Day-to-day Operations
+## Environment Configuration
 
-### Build and push a container image
+### dev (`terraform/environments/dev/terraform.tfvars`)
 
-Builds run remotely via ACR Tasks -- no local Docker needed:
+| Setting | Value |
+|---------|-------|
+| SKUs | P1v3 (App Services), Standard C0 (Redis), Basic (Search) |
+| WAF | Detection mode |
+| Custom domains | None (uses AFD default domain) |
+| VNet | 10.0.0.0/16 |
 
-```bash
-./cli/infra acr:build dev frontend:v1.2.3 ./apps/frontend
-./cli/infra acr:build dev backend-api:v2.0.0 ./apps/backend
-```
+### prod (`terraform/environments/prod/terraform.tfvars`)
 
-### Stream live logs from an App Service
-
-```bash
-./cli/infra app:logs dev frontend
-./cli/infra app:logs dev backend
-./cli/infra app:logs dev nginx
-```
-
-### Purge CDN cache after a deployment
-
-```bash
-./cli/infra afd:purge dev /
-./cli/infra afd:purge prod /static/*
-```
-
-### Rotate Redis credentials
-
-```bash
-./cli/infra secrets:rotate-redis prod
-```
-
-This regenerates the Redis primary key and updates the Key Vault secret, backend App Service connection string, and Function App app setting automatically.
-
-### Get a cost estimate
-
-```bash
-./cli/infra cost dev
-./cli/infra cost prod
-```
+| Setting | Value |
+|---------|-------|
+| SKUs | P2v3/P3v3 (App Services), Standard C1 (Redis), Standard (Search) |
+| WAF | Prevention mode |
+| Custom domains | Configured per client |
+| VNet | 10.1.0.0/16 |
+| Legacy site | Reverse proxy via Front Door rules |
 
 ---
 
-## Promoting dev to prod
+## Design Decisions
 
-Prod uses a different subscription, higher SKUs, WAF in Prevention mode, and requires custom domain DNS validation.
+**Module architecture (aligned with Azure Verified Modules)** -- Reusable building-block modules (`private_endpoint`, `diagnostic_setting`, `linux_web_app`) bake in production defaults. Each module declares its own `required_providers`. Input variables validate allowed values at plan time. Adding a new service is a single module call.
 
-**Before your first prod deploy:**
+**Private-by-default networking** -- All data services (Redis, Search, ACR, Key Vault, Storage) are accessible only via Private Endpoints inside the VNet. App Services use default-deny IP restrictions; only Azure Front Door is allowed inbound.
 
-1. Copy and edit `terraform/environments/prod/terraform.tfvars`:
-   ```hcl
-   subscription_id = "<prod-subscription-id>"
-   tenant_id       = "<prod-tenant-id>"
-   custom_domains  = ["www.yourdomain.com", "api.yourdomain.com"]
-   ```
+**Managed identity everywhere** -- All App Services and the Function App use System-assigned Managed Identity for ACR image pulls. Key Vault uses Azure RBAC (not access policies). No credentials are stored or rotated manually.
 
-2. Create the prod state backend:
-   ```bash
-   ./cli/infra bootstrap prod <prod-subscription-id>
-   ```
+**Security hardening** -- TLS 1.2 minimum, FTPS disabled, SCM/Kudu locked down, WAF with OWASP 2.1 + BotManager rules. All baked into module defaults.
 
-3. Initialise, plan, and apply:
-   ```bash
-   ./cli/infra init prod
-   ./cli/infra plan prod    # Review carefully -- prod uses Prevention WAF mode
-   ./cli/infra apply prod
-   ```
+**Storyblok CMS** -- Externally hosted. The Frontend App Service accesses it over the internet (outbound via VNet). Credentials are set directly in App Settings, never in Terraform state.
 
-4. After apply, create CNAME records pointing your custom domains to the Front Door endpoint. AFD will automatically provision TLS certificates once DNS validation passes.
+**Certificates** -- TLS terminated at Azure Front Door with managed auto-renewal. For custom domains, AFD handles DigiCert issuance once CNAME validation passes.
 
-5. Set prod secrets:
-   ```bash
-   ./cli/infra secrets:set prod
-   ```
+**State locking** -- Azure Blob Storage backend with automatic lease-based locking. Concurrent `terraform apply` runs wait or fail safely.
 
----
-
-## Key Design Decisions
-
-### Standardised module architecture
-All Terraform is built on reusable building-block modules (`private_endpoint`, `diagnostic_setting`, `linux_web_app`) that bake in production best practices as non-negotiable defaults. Service modules compose these building blocks, and the root module wires them together. This means adding new services requires only a short module call — the module handles security, networking, monitoring, and naming automatically.
-
-### Network topology
-All App Services, Functions, Redis, Search, and ACR are accessed exclusively via Private Endpoints inside the VNet. Azure Front Door reaches App Services via the AFD Premium Private Link integration.
-
-### Managed identity
-All App Services and the Function App use System-assigned Managed Identity to pull images from ACR. No ACR admin credentials are used or stored. Key Vault uses Azure RBAC (not access policies) for authorization.
-
-### Storyblok CMS
-Storyblok is externally hosted. The Frontend App Service accesses it over the internet (outbound via VNet). Credentials are stored in App Settings (set via `infra secrets:set`) and never in Terraform state or source control.
-
-### Certificates
-TLS is terminated at Azure Front Door. Certificates are managed by AFD with auto-renewal. For custom domains, AFD handles DigiCert issuance automatically once CNAME validation passes.
-
-### State locking
-The Azure Blob Storage backend provides automatic lease-based state locking. No additional configuration is needed -- concurrent `terraform apply` runs will wait or fail safely.
-
-### Stateful resource protection
-Redis, AI Search, and Key Vault have `lifecycle { prevent_destroy = true }` to guard against accidental deletion. To intentionally destroy these, you must first remove the lifecycle block.
+**Stateful resource protection** -- Redis, AI Search, and Key Vault have `lifecycle { prevent_destroy = true }`.
 
 ---
 
 ## Sensitive Variables
 
-**Never commit secrets to source control.** The prod `terraform.tfvars` is gitignored.
+**Never commit secrets to source control.**
 
 | Variable | How to set |
 |----------|-----------|
 | `subscription_id` / `tenant_id` | Edit `terraform.tfvars` per environment |
-| Storyblok API token | `./cli/infra secrets:set <env>` (interactive) |
-| Redis connection string | Auto-managed by `./cli/infra secrets:rotate-redis` |
-
----
-
-## Destroying an environment
-
-```bash
-./cli/infra destroy dev
-```
-
-You will be asked to type the environment name to confirm.
-
-**Note:** The resource group `rg-bootstrap-tfstate` (Terraform state) is not destroyed. To clean up completely:
-```bash
-# Remove the resource lock first
-az lock delete --name DoNotDelete-tfstate --resource-group rg-bootstrap-tfstate
-# Then delete the resource group
-az group delete --name rg-bootstrap-tfstate --yes
-```
+| Storyblok API token | `az webapp config appsettings set` on the frontend App Service |
 
 ---
 
 ## Troubleshooting
 
-**`Error: A resource with the ID already exists`**
-Import the existing resource: `./cli/infra state:import <env> <tf-addr> <azure-id>`
+**`Error: A resource with the ID already exists`** -- Import the existing resource: `terraform import <tf-addr> <azure-resource-id>`
 
-**Private endpoint DNS not resolving**
-Check Private DNS Zone links: ensure the VNet link exists for `privatelink.azurewebsites.net`
+**Private endpoint DNS not resolving** -- Check Private DNS Zone links: ensure the VNet link exists for `privatelink.azurewebsites.net`
 
-**App Service can't pull image from ACR**
-Confirm Managed Identity has `AcrPull` role: `az role assignment list --assignee <principal-id>`
+**App Service can't pull image from ACR** -- Confirm Managed Identity has `AcrPull` role: `az role assignment list --assignee <principal-id>`
 
-**AFD returns 503 to origins**
-Check origin health: `./cli/infra afd:origins <env>` -- App Services must allow AFD backend IPs via service tag `AzureFrontDoor.Backend`
+**AFD returns 503 to origins** -- Check origin health in the Azure Portal. App Services must allow AFD backend IPs via the `AzureFrontDoor.Backend` service tag.
 
-**Key Vault access denied (403)**
-The Key Vault uses Azure RBAC. Ensure the calling identity has the `Key Vault Secrets User` role (or `Key Vault Administrator` for write operations).
+**Key Vault access denied (403)** -- The Key Vault uses Azure RBAC. Ensure the calling identity has `Key Vault Secrets User` (read) or `Key Vault Administrator` (write).
 
-**`lifecycle { prevent_destroy }` blocking destroy**
-Redis, Search, and Key Vault are protected. To destroy, temporarily comment out the lifecycle block in the relevant module, run `terraform plan`, then `terraform apply`.
+**`lifecycle { prevent_destroy }` blocking destroy** -- Redis, Search, and Key Vault are protected. Remove the lifecycle block from the relevant module, then re-plan and apply.

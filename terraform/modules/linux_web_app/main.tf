@@ -1,8 +1,10 @@
 # ─── Linux Web App (Standardised Module) ─────────────────────────────────────
 #
 # Opinionated App Service with production defaults baked in:
-#   • HTTPS-only, always-on, all traffic routed through VNet
-#   • Front Door IP restriction (AzureFrontDoor.Backend service tag)
+#   • HTTPS-only, TLS 1.2 minimum, FTPS disabled, always-on
+#   • All traffic routed through VNet (vnet_route_all_enabled)
+#   • Default-deny IP restrictions — only Azure Front Door allowed
+#   • SCM/Kudu site locked down (scm_ip_restriction_default_action = Deny)
 #   • ACR pull via System-Assigned Managed Identity (no passwords)
 #   • Private Endpoint with automatic DNS registration
 #   • Application Insights integration
@@ -43,6 +45,11 @@ resource "azurerm_linux_web_app" "this" {
     always_on              = true
     vnet_route_all_enabled = true
     health_check_path      = var.health_check_path
+    ftps_state             = "Disabled"
+    minimum_tls_version    = "1.2"
+
+    ip_restriction_default_action     = "Deny"
+    scm_ip_restriction_default_action = "Deny"
 
     ip_restriction {
       service_tag = "AzureFrontDoor.Backend"

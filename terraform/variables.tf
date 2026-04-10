@@ -21,12 +21,22 @@ variable "location" {
   type        = string
   description = "Primary Azure region"
   default     = "uksouth"
+
+  validation {
+    condition     = can(regex("^[a-z]+[a-z0-9]*$", var.location))
+    error_message = "Location must be a valid Azure region identifier (e.g. uksouth, westeurope)."
+  }
 }
 
 variable "project" {
   type        = string
   description = "Project/client identifier (used in resource naming)"
   default     = "bootstrap"
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]{1,18}[a-z0-9]$", var.project))
+    error_message = "Project must be 3-20 lowercase alphanumeric characters or hyphens, starting with a letter."
+  }
 }
 
 variable "tags" {
@@ -61,12 +71,22 @@ variable "app_service_sku" {
   type        = string
   description = "App Service Plan SKU"
   default     = "P1v3"
+
+  validation {
+    condition     = can(regex("^(B[123]|S[123]|P[1-3]v[23]|I[1-3]v2|Y1|EP[1-3])$", var.app_service_sku))
+    error_message = "App Service SKU must be a valid plan tier (e.g. B1, S1, P1v3, EP1)."
+  }
 }
 
 variable "nginx_app_service_sku" {
   type        = string
   description = "App Service Plan SKU for NGINX (can be scaled separately)"
   default     = "P2v3"
+
+  validation {
+    condition     = can(regex("^(B[123]|S[123]|P[1-3]v[23]|I[1-3]v2|Y1|EP[1-3])$", var.nginx_app_service_sku))
+    error_message = "NGINX App Service SKU must be a valid plan tier (e.g. B1, S1, P1v3, EP1)."
+  }
 }
 
 # Container Registry
@@ -74,6 +94,11 @@ variable "acr_sku" {
   type        = string
   description = "Azure Container Registry SKU"
   default     = "Premium"
+
+  validation {
+    condition     = contains(["Basic", "Standard", "Premium"], var.acr_sku)
+    error_message = "ACR SKU must be Basic, Standard, or Premium."
+  }
 }
 
 # Redis
@@ -88,6 +113,21 @@ variable "redis_sku" {
     family   = "C"
     capacity = 1
   }
+
+  validation {
+    condition     = contains(["Basic", "Standard", "Premium"], var.redis_sku.name)
+    error_message = "Redis SKU name must be Basic, Standard, or Premium."
+  }
+
+  validation {
+    condition     = contains(["C", "P"], var.redis_sku.family)
+    error_message = "Redis SKU family must be C (Basic/Standard) or P (Premium)."
+  }
+
+  validation {
+    condition     = var.redis_sku.capacity >= 0 && var.redis_sku.capacity <= 6
+    error_message = "Redis capacity must be between 0 and 6."
+  }
 }
 
 # Azure AI Search
@@ -95,6 +135,11 @@ variable "search_sku" {
   type        = string
   description = "Azure AI Search SKU"
   default     = "standard"
+
+  validation {
+    condition     = contains(["free", "basic", "standard", "standard2", "standard3", "storage_optimized_l1", "storage_optimized_l2"], var.search_sku)
+    error_message = "Search SKU must be one of: free, basic, standard, standard2, standard3, storage_optimized_l1, storage_optimized_l2."
+  }
 }
 
 # Front Door
@@ -102,6 +147,11 @@ variable "waf_mode" {
   type        = string
   description = "WAF policy mode: Detection or Prevention"
   default     = "Prevention"
+
+  validation {
+    condition     = contains(["Detection", "Prevention"], var.waf_mode)
+    error_message = "WAF mode must be Detection or Prevention."
+  }
 }
 
 variable "custom_domains" {

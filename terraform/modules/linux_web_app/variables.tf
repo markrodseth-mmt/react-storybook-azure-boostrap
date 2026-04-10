@@ -31,6 +31,11 @@ variable "service_plan_id" {
 variable "docker_image" {
   type        = string
   description = "Docker image name and tag (e.g. frontend:latest, backend-api:v1.2.3)"
+
+  validation {
+    condition     = can(regex("^[a-z0-9][a-z0-9._/-]*:[a-zA-Z0-9._-]+$", var.docker_image))
+    error_message = "Docker image must be in name:tag format (e.g. frontend:latest)."
+  }
 }
 
 variable "acr_login_server" {
@@ -73,6 +78,11 @@ variable "health_check_path" {
   type        = string
   description = "Health check endpoint path"
   default     = "/health"
+
+  validation {
+    condition     = startswith(var.health_check_path, "/")
+    error_message = "Health check path must start with /."
+  }
 }
 
 variable "extra_app_settings" {
