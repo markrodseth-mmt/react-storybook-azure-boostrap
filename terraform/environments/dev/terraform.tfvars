@@ -1,6 +1,6 @@
-environment        = "dev"
-location           = "uksouth"
-project            = "quadient"
+environment = "dev"
+location    = "uksouth"
+project     = "quadient"
 
 # Replace with actual client subscription/tenant IDs
 subscription_id = "00000000-0000-0000-0000-000000000000"
@@ -36,7 +36,7 @@ redis_sku = {
 
 search_sku = "basic"
 
-waf_mode       = "Detection"   # Detection in dev, Prevention in prod
+waf_mode       = "Detection" # Detection in dev, Prevention in prod
 custom_domains = []
 
 # Legacy site reverse proxy — leave empty to disable in dev

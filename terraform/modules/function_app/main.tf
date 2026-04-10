@@ -57,14 +57,15 @@ resource "azurerm_linux_function_app" "data_sync" {
   }
 
   app_settings = {
-    DOCKER_REGISTRY_SERVER_URL          = "https://${var.acr_login_server}"
-    WEBSITE_PULL_IMAGE_OVER_VNET        = "true"
-    FUNCTIONS_WORKER_RUNTIME            = "dotnet-isolated"
-    AZURE_SEARCH_ENDPOINT               = var.search_endpoint
-    AZURE_SEARCH_KEY                    = "@Microsoft.KeyVault(SecretUri=${var.key_vault_uri}secrets/azure-search-key/)"
-    REDIS_CONNECTION_STRING             = "@Microsoft.KeyVault(SecretUri=${var.key_vault_uri}secrets/redis-connection-string/)"
-    WEBSITES_ENABLE_APP_SERVICE_STORAGE = "false"
-    AzureWebJobsDisableHomepage         = "true"
+    DOCKER_REGISTRY_SERVER_URL            = "https://${var.acr_login_server}"
+    WEBSITE_PULL_IMAGE_OVER_VNET          = "true"
+    FUNCTIONS_WORKER_RUNTIME              = "dotnet-isolated"
+    AZURE_SEARCH_ENDPOINT                 = var.search_endpoint
+    AZURE_SEARCH_KEY                      = "@Microsoft.KeyVault(SecretUri=${var.key_vault_uri}secrets/azure-search-key/)"
+    REDIS_CONNECTION_STRING               = "@Microsoft.KeyVault(SecretUri=${var.key_vault_uri}secrets/redis-connection-string/)"
+    WEBSITES_ENABLE_APP_SERVICE_STORAGE   = "false"
+    AzureWebJobsDisableHomepage           = "true"
+    APPLICATIONINSIGHTS_CONNECTION_STRING = var.application_insights_connection_string
   }
 }
 

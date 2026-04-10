@@ -91,42 +91,42 @@ resource "azurerm_cdn_frontdoor_origin_group" "backend" {
 # ─── Origins ──────────────────────────────────────────────────────────────────
 
 resource "azurerm_cdn_frontdoor_origin" "nginx" {
-  name                          = "origin-nginx"
-  cdn_frontdoor_origin_group_id = azurerm_cdn_frontdoor_origin_group.nginx.id
-  enabled                       = true
-  host_name                     = var.nginx_origin_hostname
-  origin_host_header            = var.nginx_origin_hostname
-  priority                      = 1
-  weight                        = 1000
+  name                           = "origin-nginx"
+  cdn_frontdoor_origin_group_id  = azurerm_cdn_frontdoor_origin_group.nginx.id
+  enabled                        = true
+  host_name                      = var.nginx_origin_hostname
+  origin_host_header             = var.nginx_origin_hostname
+  priority                       = 1
+  weight                         = 1000
   certificate_name_check_enabled = true
-  https_port                    = 443
-  http_port                     = 80
+  https_port                     = 443
+  http_port                      = 80
 }
 
 resource "azurerm_cdn_frontdoor_origin" "frontend" {
-  name                          = "origin-frontend"
-  cdn_frontdoor_origin_group_id = azurerm_cdn_frontdoor_origin_group.frontend.id
-  enabled                       = true
-  host_name                     = var.frontend_origin_hostname
-  origin_host_header            = var.frontend_origin_hostname
-  priority                      = 1
-  weight                        = 1000
+  name                           = "origin-frontend"
+  cdn_frontdoor_origin_group_id  = azurerm_cdn_frontdoor_origin_group.frontend.id
+  enabled                        = true
+  host_name                      = var.frontend_origin_hostname
+  origin_host_header             = var.frontend_origin_hostname
+  priority                       = 1
+  weight                         = 1000
   certificate_name_check_enabled = true
-  https_port                    = 443
-  http_port                     = 80
+  https_port                     = 443
+  http_port                      = 80
 }
 
 resource "azurerm_cdn_frontdoor_origin" "backend" {
-  name                          = "origin-backend"
-  cdn_frontdoor_origin_group_id = azurerm_cdn_frontdoor_origin_group.backend.id
-  enabled                       = true
-  host_name                     = var.backend_origin_hostname
-  origin_host_header            = var.backend_origin_hostname
-  priority                      = 1
-  weight                        = 1000
+  name                           = "origin-backend"
+  cdn_frontdoor_origin_group_id  = azurerm_cdn_frontdoor_origin_group.backend.id
+  enabled                        = true
+  host_name                      = var.backend_origin_hostname
+  origin_host_header             = var.backend_origin_hostname
+  priority                       = 1
+  weight                         = 1000
   certificate_name_check_enabled = true
-  https_port                    = 443
-  http_port                     = 80
+  https_port                     = 443
+  http_port                      = 80
 }
 
 # ─── Legacy Site Origin (Old Site Reverse Proxy) ─────────────────────────────

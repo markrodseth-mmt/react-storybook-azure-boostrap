@@ -7,8 +7,14 @@ variable "private_endpoint_subnet_id" { type = string }
 variable "acr_login_server" { type = string }
 variable "acr_id" { type = string }
 variable "search_endpoint" { type = string }
-variable "search_key" { type = string; sensitive = true }
-variable "redis_connection_string" { type = string; sensitive = true }
+variable "search_key" {
+  type      = string
+  sensitive = true
+}
+variable "redis_connection_string" {
+  type      = string
+  sensitive = true
+}
 variable "private_dns_zone_ids" { type = list(string) }
 variable "storage_blob_private_dns_zone_ids" { type = list(string) }
 variable "storage_queue_private_dns_zone_ids" { type = list(string) }
@@ -21,5 +27,9 @@ variable "key_vault_id" {
 variable "key_vault_uri" {
   type        = string
   description = "Key Vault URI for @Microsoft.KeyVault references"
+}
+variable "application_insights_connection_string" {
+  type      = string
+  sensitive = true
 }
 variable "tags" { type = map(string) }

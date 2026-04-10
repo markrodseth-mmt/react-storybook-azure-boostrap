@@ -36,10 +36,10 @@ resource "azurerm_linux_web_app" "nginx" {
     health_check_path      = "/health"
 
     ip_restriction {
-      service_tag               = "AzureFrontDoor.Backend"
-      name                      = "AllowFrontDoorOnly"
-      priority                  = 100
-      action                    = "Allow"
+      service_tag = "AzureFrontDoor.Backend"
+      name        = "AllowFrontDoorOnly"
+      priority    = 100
+      action      = "Allow"
       headers {
         x_azure_fdid = [var.front_door_id]
       }
@@ -58,9 +58,10 @@ resource "azurerm_linux_web_app" "nginx" {
   }
 
   app_settings = {
-    DOCKER_REGISTRY_SERVER_URL          = "https://${var.acr_login_server}"
-    WEBSITES_ENABLE_APP_SERVICE_STORAGE = "false"
-    WEBSITE_PULL_IMAGE_OVER_VNET        = "true"
+    DOCKER_REGISTRY_SERVER_URL            = "https://${var.acr_login_server}"
+    WEBSITES_ENABLE_APP_SERVICE_STORAGE   = "false"
+    WEBSITE_PULL_IMAGE_OVER_VNET          = "true"
+    APPLICATIONINSIGHTS_CONNECTION_STRING = var.application_insights_connection_string
   }
 }
 
@@ -81,17 +82,17 @@ resource "azurerm_linux_web_app" "frontend" {
     health_check_path      = "/health"
 
     ip_restriction {
-      service_tag               = "AzureFrontDoor.Backend"
-      name                      = "AllowFrontDoorOnly"
-      priority                  = 100
-      action                    = "Allow"
+      service_tag = "AzureFrontDoor.Backend"
+      name        = "AllowFrontDoorOnly"
+      priority    = 100
+      action      = "Allow"
       headers {
         x_azure_fdid = [var.front_door_id]
       }
     }
 
     application_stack {
-      docker_image_name = "frontend:latest"
+      docker_image_name        = "frontend:latest"
       docker_registry_url      = "https://${var.acr_login_server}"
       docker_registry_username = null
       docker_registry_password = null
@@ -103,10 +104,11 @@ resource "azurerm_linux_web_app" "frontend" {
   }
 
   app_settings = {
-    DOCKER_REGISTRY_SERVER_URL          = "https://${var.acr_login_server}"
-    WEBSITES_ENABLE_APP_SERVICE_STORAGE = "false"
-    WEBSITE_PULL_IMAGE_OVER_VNET        = "true"
-    PORT                                = "8080"
+    DOCKER_REGISTRY_SERVER_URL            = "https://${var.acr_login_server}"
+    WEBSITES_ENABLE_APP_SERVICE_STORAGE   = "false"
+    WEBSITE_PULL_IMAGE_OVER_VNET          = "true"
+    PORT                                  = "8080"
+    APPLICATIONINSIGHTS_CONNECTION_STRING = var.application_insights_connection_string
     # Storyblok credentials are managed out-of-band via: ./cli/infra secrets:set <env>
   }
 }
@@ -128,10 +130,10 @@ resource "azurerm_linux_web_app" "backend" {
     health_check_path      = "/health"
 
     ip_restriction {
-      service_tag               = "AzureFrontDoor.Backend"
-      name                      = "AllowFrontDoorOnly"
-      priority                  = 100
-      action                    = "Allow"
+      service_tag = "AzureFrontDoor.Backend"
+      name        = "AllowFrontDoorOnly"
+      priority    = 100
+      action      = "Allow"
       headers {
         x_azure_fdid = [var.front_door_id]
       }
@@ -150,10 +152,11 @@ resource "azurerm_linux_web_app" "backend" {
   }
 
   app_settings = {
-    DOCKER_REGISTRY_SERVER_URL          = "https://${var.acr_login_server}"
-    WEBSITES_ENABLE_APP_SERVICE_STORAGE = "false"
-    WEBSITE_PULL_IMAGE_OVER_VNET        = "true"
-    ASPNETCORE_ENVIRONMENT              = "Production"
+    DOCKER_REGISTRY_SERVER_URL            = "https://${var.acr_login_server}"
+    WEBSITES_ENABLE_APP_SERVICE_STORAGE   = "false"
+    WEBSITE_PULL_IMAGE_OVER_VNET          = "true"
+    ASPNETCORE_ENVIRONMENT                = "Production"
+    APPLICATIONINSIGHTS_CONNECTION_STRING = var.application_insights_connection_string
     # Redis and Search connection strings injected post-deploy via Key Vault references
   }
 }

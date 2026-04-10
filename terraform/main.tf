@@ -66,19 +66,20 @@ module "container_registry" {
 module "app_services" {
   source = "./modules/app_services"
 
-  prefix                     = local.prefix
-  suffix                     = local.suffix
-  location                   = var.location
-  resource_group_name        = azurerm_resource_group.main.name
-  app_service_sku            = var.app_service_sku
-  nginx_sku                  = var.nginx_app_service_sku
-  vnet_integration_subnet_id = module.networking.app_services_subnet_id
-  private_endpoint_subnet_id = module.networking.private_endpoint_subnet_id
-  acr_login_server           = module.container_registry.login_server
-  acr_id                     = module.container_registry.id
-  private_dns_zone_ids       = module.networking.app_service_private_dns_zone_ids
-  front_door_id              = azurerm_cdn_frontdoor_profile.main.resource_guid
-  tags                       = local.common_tags
+  prefix                                 = local.prefix
+  suffix                                 = local.suffix
+  location                               = var.location
+  resource_group_name                    = azurerm_resource_group.main.name
+  app_service_sku                        = var.app_service_sku
+  nginx_sku                              = var.nginx_app_service_sku
+  vnet_integration_subnet_id             = module.networking.app_services_subnet_id
+  private_endpoint_subnet_id             = module.networking.private_endpoint_subnet_id
+  acr_login_server                       = module.container_registry.login_server
+  acr_id                                 = module.container_registry.id
+  private_dns_zone_ids                   = module.networking.app_service_private_dns_zone_ids
+  front_door_id                          = azurerm_cdn_frontdoor_profile.main.resource_guid
+  application_insights_connection_string = module.monitoring.application_insights_connection_string
+  tags                                   = local.common_tags
 }
 
 # ─── Redis ───────────────────────────────────────────────────────────────────
@@ -132,6 +133,12 @@ resource "azurerm_role_assignment" "deployer_kv_admin" {
   principal_id         = data.azurerm_client_config.current.object_id
 }
 
+resource "azurerm_role_assignment" "backend_kv_secrets" {
+  scope                = module.key_vault.id
+  role_definition_name = "Key Vault Secrets User"
+  principal_id         = module.app_services.backend_identity_principal_id
+}
+
 # Store secrets in Key Vault for App Service / Function App Key Vault references
 
 resource "azurerm_key_vault_secret" "search_key" {
@@ -155,25 +162,26 @@ resource "azurerm_key_vault_secret" "redis_connection_string" {
 module "function_app" {
   source = "./modules/function_app"
 
-  prefix                             = local.prefix
-  suffix                             = local.suffix
-  location                           = var.location
-  resource_group_name                = azurerm_resource_group.main.name
-  vnet_integration_subnet_id         = module.networking.functions_subnet_id
-  private_endpoint_subnet_id         = module.networking.private_endpoint_subnet_id
-  acr_login_server                   = module.container_registry.login_server
-  acr_id                             = module.container_registry.id
-  search_endpoint                    = module.search.endpoint
-  search_key                         = module.search.primary_key
-  redis_connection_string            = module.redis.primary_connection_string
-  private_dns_zone_ids               = module.networking.function_private_dns_zone_ids
-  storage_blob_private_dns_zone_ids  = module.networking.storage_blob_private_dns_zone_ids
-  storage_queue_private_dns_zone_ids = module.networking.storage_queue_private_dns_zone_ids
-  storage_table_private_dns_zone_ids = module.networking.storage_table_private_dns_zone_ids
-  storage_file_private_dns_zone_ids  = module.networking.storage_file_private_dns_zone_ids
-  key_vault_id                       = module.key_vault.id
-  key_vault_uri                      = module.key_vault.uri
-  tags                               = local.common_tags
+  prefix                                 = local.prefix
+  suffix                                 = local.suffix
+  location                               = var.location
+  resource_group_name                    = azurerm_resource_group.main.name
+  vnet_integration_subnet_id             = module.networking.functions_subnet_id
+  private_endpoint_subnet_id             = module.networking.private_endpoint_subnet_id
+  acr_login_server                       = module.container_registry.login_server
+  acr_id                                 = module.container_registry.id
+  search_endpoint                        = module.search.endpoint
+  search_key                             = module.search.primary_key
+  redis_connection_string                = module.redis.primary_connection_string
+  private_dns_zone_ids                   = module.networking.function_private_dns_zone_ids
+  storage_blob_private_dns_zone_ids      = module.networking.storage_blob_private_dns_zone_ids
+  storage_queue_private_dns_zone_ids     = module.networking.storage_queue_private_dns_zone_ids
+  storage_table_private_dns_zone_ids     = module.networking.storage_table_private_dns_zone_ids
+  storage_file_private_dns_zone_ids      = module.networking.storage_file_private_dns_zone_ids
+  key_vault_id                           = module.key_vault.id
+  key_vault_uri                          = module.key_vault.uri
+  application_insights_connection_string = module.monitoring.application_insights_connection_string
+  tags                                   = local.common_tags
 }
 
 # ─── Azure Front Door Profile (created first to break dependency cycle) ───────
@@ -214,12 +222,16 @@ module "front_door" {
 module "monitoring" {
   source = "./modules/monitoring"
 
-  prefix                = local.prefix
-  location              = var.location
-  resource_group_name   = azurerm_resource_group.main.name
-  front_door_profile_id = azurerm_cdn_frontdoor_profile.main.id
-  redis_id              = module.redis.id
-  search_id             = module.search.id
-  key_vault_id          = module.key_vault.id
-  tags                  = local.common_tags
+  prefix                  = local.prefix
+  location                = var.location
+  resource_group_name     = azurerm_resource_group.main.name
+  front_door_profile_id   = azurerm_cdn_frontdoor_profile.main.id
+  redis_id                = module.redis.id
+  search_id               = module.search.id
+  key_vault_id            = module.key_vault.id
+  nginx_app_service_id    = module.app_services.nginx_id
+  frontend_app_service_id = module.app_services.frontend_id
+  backend_app_service_id  = module.app_services.backend_id
+  function_app_id         = module.function_app.id
+  tags                    = local.common_tags
 }

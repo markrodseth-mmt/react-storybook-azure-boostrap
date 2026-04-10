@@ -49,10 +49,10 @@ variable "subnet_config" {
   }))
   description = "Subnet configuration map"
   default = {
-    app_services = { address_prefixes = ["10.0.1.0/24"] }
+    app_services      = { address_prefixes = ["10.0.1.0/24"] }
     private_endpoints = { address_prefixes = ["10.0.2.0/24"] }
-    devops_agents = { address_prefixes = ["10.0.3.0/24"] }
-    functions     = { address_prefixes = ["10.0.4.0/24"] }
+    devops_agents     = { address_prefixes = ["10.0.3.0/24"] }
+    functions         = { address_prefixes = ["10.0.4.0/24"] }
   }
 }
 

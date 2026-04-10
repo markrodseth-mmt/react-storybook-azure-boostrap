@@ -46,6 +46,11 @@ variable "front_door_id" {
   type        = string
   description = "Azure Front Door resource GUID for access restriction"
 }
+variable "application_insights_connection_string" {
+  type        = string
+  description = "Application Insights connection string for APM"
+  sensitive   = true
+}
 variable "tags" {
   type        = map(string)
   description = "Tags applied to all resources"
