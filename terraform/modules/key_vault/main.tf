@@ -17,22 +17,16 @@ resource "azurerm_key_vault" "main" {
 
 # ─── Private Endpoint ─────────────────────────────────────────────────────────
 
-resource "azurerm_private_endpoint" "key_vault" {
-  name                = "pe-${var.prefix}-kv"
-  location            = var.location
-  resource_group_name = var.resource_group_name
-  subnet_id           = var.private_endpoint_subnet_id
-  tags                = var.tags
+module "private_endpoint" {
+  source = "../private_endpoint"
 
-  private_service_connection {
-    name                           = "psc-kv"
-    private_connection_resource_id = azurerm_key_vault.main.id
-    subresource_names              = ["vault"]
-    is_manual_connection           = false
-  }
-
-  private_dns_zone_group {
-    name                 = "dns-group-kv"
-    private_dns_zone_ids = var.private_dns_zone_ids
-  }
+  prefix               = var.prefix
+  name                 = "kv"
+  location             = var.location
+  resource_group_name  = var.resource_group_name
+  subnet_id            = var.private_endpoint_subnet_id
+  resource_id          = azurerm_key_vault.main.id
+  subresource_names    = ["vault"]
+  private_dns_zone_ids = var.private_dns_zone_ids
+  tags                 = var.tags
 }

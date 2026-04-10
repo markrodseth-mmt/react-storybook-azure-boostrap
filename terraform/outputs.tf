@@ -5,17 +5,17 @@ output "front_door_endpoint" {
 
 output "frontend_app_url" {
   description = "Frontend App Service URL"
-  value       = "https://${module.app_services.frontend_hostname}"
+  value       = "https://${module.frontend.hostname}"
 }
 
 output "backend_api_url" {
   description = "Backend API App Service URL"
-  value       = "https://${module.app_services.backend_hostname}"
+  value       = "https://${module.backend.hostname}"
 }
 
 output "nginx_app_url" {
   description = "NGINX App Service URL"
-  value       = "https://${module.app_services.nginx_hostname}"
+  value       = "https://${module.nginx.hostname}"
 }
 
 output "container_registry_login_server" {

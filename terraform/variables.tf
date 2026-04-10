@@ -26,7 +26,7 @@ variable "location" {
 variable "project" {
   type        = string
   description = "Project/client identifier (used in resource naming)"
-  default     = "quadient"
+  default     = "bootstrap"
 }
 
 variable "tags" {

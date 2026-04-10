@@ -1,6 +1,6 @@
-# Quadient Azure Infrastructure Bootstrap
+# Bootstrap Azure Infrastructure Bootstrap
 
-Terraform bootstrap and CLI for the Quadient reference architecture:
+Terraform bootstrap and CLI for the Bootstrap reference architecture:
 Azure Front Door Premium, App Services (NGINX + Frontend + Backend), Redis, AI Search, Function App -- all private-networked via VNet + Private Endpoints.
 
 ---
@@ -186,29 +186,88 @@ flowchart LR
 
 ---
 
+## Module Architecture
+
+The Terraform codebase is built on **standardised, reusable building-block modules** that bake in best practices as defaults. Service modules compose these building blocks, and the root module wires everything together. This design means AI-assisted infrastructure changes operate at the composition level rather than freestyling raw provider syntax.
+
+### Building Blocks
+
+| Module | Purpose | Baked-in Defaults |
+|--------|---------|-------------------|
+| `private_endpoint` | Private Link + DNS registration | Automatic DNS zone group, standardised naming |
+| `diagnostic_setting` | Log Analytics diagnostic shipping | AllMetrics enabled by default |
+| `linux_web_app` | Opinionated App Service | HTTPS-only, always-on, VNet route-all, Front Door IP restriction, ACR pull via managed identity, private endpoint, App Insights |
+
+### Service Modules
+
+| Module | Composes | Purpose |
+|--------|----------|---------|
+| `networking` | — | VNet, subnets, NSGs, Private DNS Zones |
+| `container_registry` | `private_endpoint` | ACR Premium + geo-replication |
+| `redis` | `private_endpoint` | Redis Cache with security defaults |
+| `search` | `private_endpoint` | Azure AI Search |
+| `key_vault` | `private_endpoint` | Key Vault (RBAC-enabled) |
+| `function_app` | `private_endpoint` (×5) | Data Sync Function App + storage |
+| `front_door` | — | AFD Premium, WAF, CDN, routes, custom domains |
+| `monitoring` | `diagnostic_setting` (×N) | Log Analytics + App Insights + all diagnostics |
+
+### Adding a New Web App
+
+To add a new service, add a single module call in `main.tf`:
+
+```hcl
+module "my_new_service" {
+  source = "./modules/linux_web_app"
+
+  prefix              = local.prefix
+  name                = "my-service"
+  suffix              = local.suffix
+  location            = var.location
+  resource_group_name = azurerm_resource_group.main.name
+  service_plan_id     = azurerm_service_plan.apps.id
+  docker_image        = "my-service:latest"
+  acr_login_server    = module.container_registry.login_server
+  acr_id              = module.container_registry.id
+  vnet_integration_subnet_id = module.networking.subnet_ids["app_services"]
+  private_endpoint_subnet_id = module.networking.subnet_ids["private_endpoints"]
+  private_dns_zone_ids       = module.networking.private_dns_zone_ids["app_service"]
+  front_door_id              = azurerm_cdn_frontdoor_profile.main.resource_guid
+  application_insights_connection_string = module.monitoring.application_insights_connection_string
+  tags                = local.common_tags
+
+  extra_app_settings = {
+    MY_CUSTOM_VAR = "value"
+  }
+}
+```
+
+The module handles HTTPS enforcement, VNet integration, Front Door IP restrictions, ACR pull permissions, private endpoint creation, DNS registration, and App Insights — no boilerplate needed.
+
+---
+
 ## What Gets Created
 
 | Resource | Name Pattern | SKU (dev / prod) | Purpose |
 |----------|-------------|-------------------|---------|
-| Resource Groups | `rg-quadient-{env}-main`, `-networking` | -- | Resource organisation |
-| Virtual Network | `vnet-quadient-{env}` | -- | Private networking for all services |
-| Subnets (x4) | `snet-quadient-{env}-*` | -- | App Services, Private Endpoints, Functions |
-| NSGs | `nsg-quadient-{env}-app-services` | -- | Allow AFD + VNet only, deny internet |
+| Resource Groups | `rg-bootstrap-{env}-main`, `-networking` | -- | Resource organisation |
+| Virtual Network | `vnet-bootstrap-{env}` | -- | Private networking for all services |
+| Subnets (x4) | `snet-bootstrap-{env}-*` | -- | App Services, Private Endpoints, Functions |
+| NSGs | `nsg-bootstrap-{env}-app-services` | -- | Allow AFD + VNet only, deny internet |
 | Private DNS Zones | `privatelink.*.net` | -- | DNS resolution for private endpoints |
-| Azure Front Door | `afd-quadient-{env}` | Premium | Global load balancing, WAF, CDN, TLS |
+| Azure Front Door | `afd-bootstrap-{env}` | Premium | Global load balancing, WAF, CDN, TLS |
 | WAF Policy | `waf*policy` | Detection / Prevention | OWASP + Bot protection |
-| App Service Plan (NGINX) | `asp-quadient-{env}-nginx` | P1v3 / P3v3 | Dedicated plan for redirect workload |
-| App Service Plan (apps) | `asp-quadient-{env}-apps` | P1v3 / P2v3 | Shared plan for frontend + backend |
-| Web App (NGINX) | `app-quadient-{env}-nginx-*` | -- | High-volume redirects and routing rules |
-| Web App (Frontend) | `app-quadient-{env}-frontend-*` | -- | Astro + Storyblok SSR application |
-| Web App (Backend) | `app-quadient-{env}-backend-*` | -- | .NET minimal API with Fusion Cache |
+| App Service Plan (NGINX) | `asp-bootstrap-{env}-nginx` | P1v3 / P3v3 | Dedicated plan for redirect workload |
+| App Service Plan (apps) | `asp-bootstrap-{env}-apps` | P1v3 / P2v3 | Shared plan for frontend + backend |
+| Web App (NGINX) | `app-bootstrap-{env}-nginx-*` | -- | High-volume redirects and routing rules |
+| Web App (Frontend) | `app-bootstrap-{env}-frontend-*` | -- | Astro + Storyblok SSR application |
+| Web App (Backend) | `app-bootstrap-{env}-backend-*` | -- | .NET minimal API with Fusion Cache |
 | Container Registry | `acr*` | Premium | Docker images with geo-replication |
-| Function App | `func-quadient-{env}-datasync-*` | Elastic Premium EP1 | Data synchronisation between systems |
+| Function App | `func-bootstrap-{env}-datasync-*` | Elastic Premium EP1 | Data synchronisation between systems |
 | Storage Account | `st*fn*` | Standard LRS | Function App runtime storage |
-| Redis Cache | `redis-quadient-{env}` | Standard C0 / C1 | Application caching |
-| AI Search | `srch-quadient-{env}` | Basic / Standard | Full-text search |
-| Key Vault | `kv-quadient-{env}` | Standard | Secrets management (RBAC-enabled) |
-| Log Analytics | `law-quadient-{env}` | PerGB2018 | Centralised logging and diagnostics |
+| Redis Cache | `redis-bootstrap-{env}` | Standard C0 / C1 | Application caching |
+| AI Search | `srch-bootstrap-{env}` | Basic / Standard | Full-text search |
+| Key Vault | `kv-bootstrap-{env}` | Standard | Secrets management (RBAC-enabled) |
+| Log Analytics | `law-bootstrap-{env}` | PerGB2018 | Centralised logging and diagnostics |
 
 ---
 
@@ -216,7 +275,7 @@ flowchart LR
 
 | Tool | Version | Install |
 |------|---------|---------|
-| [Terraform](https://developer.hashicorp.com/terraform/install) | >= 1.6 | `brew install terraform` |
+| [Terraform](https://developer.hashicorp.com/terraform/install) | >= 1.14 | `brew install terraform` |
 | [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) | >= 2.55 | `brew install azure-cli` |
 | [Infracost](https://www.infracost.io/docs/) | >= 0.10 | Optional -- cost estimation |
 
@@ -236,7 +295,7 @@ The deploying identity (user or service principal) needs these roles on the targ
 ## Project Structure
 
 ```
-quadient-bootstrap/
+bootstrap-bootstrap/
 ├── apps/
 │   └── frontend/                    # Astro + React + Storyblok frontend
 │       ├── src/
@@ -252,19 +311,25 @@ quadient-bootstrap/
 └── terraform/
     ├── providers.tf                 # AzureRM v4 + AzureAD provider config
     ├── variables.tf                 # All input variables
-    ├── main.tf                      # Root module — wires all modules together
+    ├── main.tf                      # Root module — composes all modules
     ├── outputs.tf                   # Root outputs (URLs, endpoints)
     │
     ├── modules/
+    │   │
+    │   │── # ── Building Blocks (reusable primitives) ──────────
+    │   ├── private_endpoint/        # Private Link + DNS (used by all service modules)
+    │   ├── diagnostic_setting/      # Log Analytics diagnostic shipping
+    │   ├── linux_web_app/           # Opinionated App Service with all defaults baked in
+    │   │
+    │   │── # ── Service Modules (compose building blocks) ──────
     │   ├── networking/              # VNet, subnets, NSGs, Private DNS Zones
     │   ├── front_door/              # AFD Premium, WAF, CDN, routes, custom domains
-    │   ├── app_services/            # NGINX, Frontend (Astro + Storyblok), Backend (.NET)
     │   ├── container_registry/      # ACR Premium + geo-replication
     │   ├── function_app/            # Data Sync Function App (Elastic Premium)
     │   ├── search/                  # Azure AI Search
     │   ├── redis/                   # Azure Redis Cache
-    │   ├── key_vault/               # Key Vault (RBAC-enabled) + Private Endpoint
-    │   └── monitoring/              # Log Analytics + diagnostic settings
+    │   ├── key_vault/               # Key Vault (RBAC-enabled)
+    │   └── monitoring/              # Log Analytics + App Insights + diagnostics
     │
     └── environments/
         ├── dev/
@@ -414,6 +479,9 @@ Prod uses a different subscription, higher SKUs, WAF in Prevention mode, and req
 
 ## Key Design Decisions
 
+### Standardised module architecture
+All Terraform is built on reusable building-block modules (`private_endpoint`, `diagnostic_setting`, `linux_web_app`) that bake in production best practices as non-negotiable defaults. Service modules compose these building blocks, and the root module wires them together. This means adding new services requires only a short module call — the module handles security, networking, monitoring, and naming automatically.
+
 ### Network topology
 All App Services, Functions, Redis, Search, and ACR are accessed exclusively via Private Endpoints inside the VNet. Azure Front Door reaches App Services via the AFD Premium Private Link integration.
 
@@ -454,12 +522,12 @@ Redis, AI Search, and Key Vault have `lifecycle { prevent_destroy = true }` to g
 
 You will be asked to type the environment name to confirm.
 
-**Note:** The resource group `rg-quadient-tfstate` (Terraform state) is not destroyed. To clean up completely:
+**Note:** The resource group `rg-bootstrap-tfstate` (Terraform state) is not destroyed. To clean up completely:
 ```bash
 # Remove the resource lock first
-az lock delete --name DoNotDelete-tfstate --resource-group rg-quadient-tfstate
+az lock delete --name DoNotDelete-tfstate --resource-group rg-bootstrap-tfstate
 # Then delete the resource group
-az group delete --name rg-quadient-tfstate --yes
+az group delete --name rg-bootstrap-tfstate --yes
 ```
 
 ---

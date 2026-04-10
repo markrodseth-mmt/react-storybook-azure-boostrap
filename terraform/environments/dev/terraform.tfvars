@@ -1,6 +1,6 @@
 environment = "dev"
 location    = "uksouth"
-project     = "quadient"
+project     = "bootstrap"
 
 # Replace with actual client subscription/tenant IDs
 subscription_id = "00000000-0000-0000-0000-000000000000"
@@ -49,5 +49,5 @@ acr_replication_location = "ukwest"
 tags = {
   Owner      = "platform-team"
   CostCenter = "engineering"
-  Client     = "quadient"
+  Client     = "bootstrap"
 }

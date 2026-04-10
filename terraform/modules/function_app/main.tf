@@ -69,7 +69,7 @@ resource "azurerm_linux_function_app" "data_sync" {
   }
 }
 
-# ─── ACR Pull Permission ──────────────────────────────────────────────────────
+# ─── ACR Pull Permission ─────────────────────────────────────────────────────
 
 resource "azurerm_role_assignment" "func_acr_pull" {
   scope                = var.acr_id
@@ -77,121 +77,52 @@ resource "azurerm_role_assignment" "func_acr_pull" {
   principal_id         = azurerm_linux_function_app.data_sync.identity[0].principal_id
 }
 
-# ─── Storage Account Private Endpoint ─────────────────────────────────────────
-# Required: storage has public_network_access_enabled = false, so the Function
-# App runtime must reach it over Private Link.
-
-resource "azurerm_private_endpoint" "func_storage" {
-  name                = "pe-${var.prefix}-func-storage"
-  location            = var.location
-  resource_group_name = var.resource_group_name
-  subnet_id           = var.private_endpoint_subnet_id
-  tags                = var.tags
-
-  private_service_connection {
-    name                           = "psc-func-storage"
-    private_connection_resource_id = azurerm_storage_account.func.id
-    subresource_names              = ["blob"]
-    is_manual_connection           = false
-  }
-
-  private_dns_zone_group {
-    name                 = "dns-group-func-storage"
-    private_dns_zone_ids = var.storage_blob_private_dns_zone_ids
-  }
-}
-
-# ─── Private Endpoint ─────────────────────────────────────────────────────────
-
-resource "azurerm_private_endpoint" "func" {
-  name                = "pe-${var.prefix}-func"
-  location            = var.location
-  resource_group_name = var.resource_group_name
-  subnet_id           = var.private_endpoint_subnet_id
-  tags                = var.tags
-
-  private_service_connection {
-    name                           = "psc-func"
-    private_connection_resource_id = azurerm_linux_function_app.data_sync.id
-    subresource_names              = ["sites"]
-    is_manual_connection           = false
-  }
-
-  private_dns_zone_group {
-    name                 = "dns-group-func"
-    private_dns_zone_ids = var.private_dns_zone_ids
-  }
-}
-
-# ─── Storage Private Endpoints (queue, table, file) ──────────────────────────
-# The Function App runtime requires access to all four storage subresources.
-# Blob is handled above; queue, table, and file are added here.
-
-resource "azurerm_private_endpoint" "func_storage_queue" {
-  name                = "pe-${var.prefix}-func-storage-queue"
-  location            = var.location
-  resource_group_name = var.resource_group_name
-  subnet_id           = var.private_endpoint_subnet_id
-  tags                = var.tags
-
-  private_service_connection {
-    name                           = "psc-func-storage-queue"
-    private_connection_resource_id = azurerm_storage_account.func.id
-    subresource_names              = ["queue"]
-    is_manual_connection           = false
-  }
-
-  private_dns_zone_group {
-    name                 = "dns-group-func-storage-queue"
-    private_dns_zone_ids = var.storage_queue_private_dns_zone_ids
-  }
-}
-
-resource "azurerm_private_endpoint" "func_storage_table" {
-  name                = "pe-${var.prefix}-func-storage-table"
-  location            = var.location
-  resource_group_name = var.resource_group_name
-  subnet_id           = var.private_endpoint_subnet_id
-  tags                = var.tags
-
-  private_service_connection {
-    name                           = "psc-func-storage-table"
-    private_connection_resource_id = azurerm_storage_account.func.id
-    subresource_names              = ["table"]
-    is_manual_connection           = false
-  }
-
-  private_dns_zone_group {
-    name                 = "dns-group-func-storage-table"
-    private_dns_zone_ids = var.storage_table_private_dns_zone_ids
-  }
-}
-
-resource "azurerm_private_endpoint" "func_storage_file" {
-  name                = "pe-${var.prefix}-func-storage-file"
-  location            = var.location
-  resource_group_name = var.resource_group_name
-  subnet_id           = var.private_endpoint_subnet_id
-  tags                = var.tags
-
-  private_service_connection {
-    name                           = "psc-func-storage-file"
-    private_connection_resource_id = azurerm_storage_account.func.id
-    subresource_names              = ["file"]
-    is_manual_connection           = false
-  }
-
-  private_dns_zone_group {
-    name                 = "dns-group-func-storage-file"
-    private_dns_zone_ids = var.storage_file_private_dns_zone_ids
-  }
-}
-
 # ─── Key Vault RBAC ──────────────────────────────────────────────────────────
-# Grant the Function App identity read access to Key Vault secrets via RBAC.
 
 resource "azurerm_role_assignment" "func_kv_secrets" {
   scope                = var.key_vault_id
   role_definition_name = "Key Vault Secrets User"
   principal_id         = azurerm_linux_function_app.data_sync.identity[0].principal_id
+}
+
+# ─── Private Endpoints ────────────────────────────────────────────────────────
+
+module "pe_func" {
+  source = "../private_endpoint"
+
+  prefix               = var.prefix
+  name                 = "func"
+  location             = var.location
+  resource_group_name  = var.resource_group_name
+  subnet_id            = var.private_endpoint_subnet_id
+  resource_id          = azurerm_linux_function_app.data_sync.id
+  subresource_names    = ["sites"]
+  private_dns_zone_ids = var.private_dns_zone_ids
+  tags                 = var.tags
+}
+
+# Storage requires private endpoints for all four subresources (blob, queue, table, file).
+
+locals {
+  storage_pe_config = {
+    blob  = var.storage_blob_private_dns_zone_ids
+    queue = var.storage_queue_private_dns_zone_ids
+    table = var.storage_table_private_dns_zone_ids
+    file  = var.storage_file_private_dns_zone_ids
+  }
+}
+
+module "pe_storage" {
+  for_each = local.storage_pe_config
+  source   = "../private_endpoint"
+
+  prefix               = var.prefix
+  name                 = "func-storage-${each.key}"
+  location             = var.location
+  resource_group_name  = var.resource_group_name
+  subnet_id            = var.private_endpoint_subnet_id
+  resource_id          = azurerm_storage_account.func.id
+  subresource_names    = [each.key]
+  private_dns_zone_ids = each.value
+  tags                 = var.tags
 }

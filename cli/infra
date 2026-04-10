@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  infra  — Quadient Azure Infrastructure CLI
+#  infra  — Bootstrap Azure Infrastructure CLI
 # =============================================================================
 #  Usage:  ./cli/infra <command> [options]
 #
@@ -107,7 +107,7 @@ subscription_for_env() {
 # Resolves App Service name by role
 app_name_for() {
   local env=$1 role=$2
-  local prefix="quadient-${env}"
+  local prefix="bootstrap-${env}"
   case "$role" in
     nginx)    az webapp list --resource-group "rg-${prefix}-main" --query "[?contains(name,'nginx')].name" -o tsv 2>/dev/null | head -1 ;;
     frontend) az webapp list --resource-group "rg-${prefix}-main" --query "[?contains(name,'frontend')].name" -o tsv 2>/dev/null | head -1 ;;
@@ -117,7 +117,7 @@ app_name_for() {
 }
 
 resource_group() {
-  echo "rg-quadient-$1-main"
+  echo "rg-bootstrap-$1-main"
 }
 
 # ─── Commands ─────────────────────────────────────────────────────────────────
@@ -130,8 +130,8 @@ cmd_bootstrap() {
 
   header "Bootstrapping Terraform state backend"
 
-  local rg="rg-quadient-tfstate"
-  local sa="stquadienttfstate"
+  local rg="rg-bootstrap-tfstate"
+  local sa="stbootstraptfstate"
   local container="tfstate"
   local location="uksouth"
 
@@ -373,13 +373,13 @@ cmd_afd_purge() {
 
   local rg profile
   rg="$(resource_group "$env")"
-  profile="afd-quadient-${env}"
+  profile="afd-bootstrap-${env}"
 
   header "Purging AFD CDN cache — $path"
   az afd endpoint purge \
     --resource-group "$rg" \
     --profile-name "$profile" \
-    --endpoint-name "fde-quadient-${env}" \
+    --endpoint-name "fde-bootstrap-${env}" \
     --content-paths "$path" \
     --output none
   success "Cache purged"
@@ -391,7 +391,7 @@ cmd_afd_origins() {
   valid_env "$env"
   require az
 
-  local rg="$(resource_group "$env")" profile="afd-quadient-${env}"
+  local rg="$(resource_group "$env")" profile="afd-bootstrap-${env}"
   header "Front Door origin health — $env"
   az afd origin-group list \
     --resource-group "$rg" \
@@ -406,7 +406,7 @@ cmd_afd_legacy() {
   valid_env "$env"
   require az
 
-  local rg="$(resource_group "$env")" profile="afd-quadient-${env}"
+  local rg="$(resource_group "$env")" profile="afd-bootstrap-${env}"
 
   case "$action" in
     status)
@@ -682,7 +682,7 @@ cmd_docs() {
 cmd_help() {
   cat <<EOF
 
-${BOLD}${CYAN}infra${RESET} — Quadient Azure Infrastructure CLI
+${BOLD}${CYAN}infra${RESET} — Bootstrap Azure Infrastructure CLI
 
 ${BOLD}Usage:${RESET}
   infra <command> [arguments]

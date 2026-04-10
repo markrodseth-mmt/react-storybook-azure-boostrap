@@ -22,22 +22,18 @@ resource "azurerm_redis_cache" "main" {
   }
 }
 
-resource "azurerm_private_endpoint" "redis" {
-  name                = "pe-${var.prefix}-redis"
-  location            = var.location
-  resource_group_name = var.resource_group_name
-  subnet_id           = var.private_endpoint_subnet_id
-  tags                = var.tags
+# ─── Private Endpoint ─────────────────────────────────────────────────────────
 
-  private_service_connection {
-    name                           = "psc-redis"
-    private_connection_resource_id = azurerm_redis_cache.main.id
-    subresource_names              = ["redisCache"]
-    is_manual_connection           = false
-  }
+module "private_endpoint" {
+  source = "../private_endpoint"
 
-  private_dns_zone_group {
-    name                 = "dns-group-redis"
-    private_dns_zone_ids = var.private_dns_zone_ids
-  }
+  prefix               = var.prefix
+  name                 = "redis"
+  location             = var.location
+  resource_group_name  = var.resource_group_name
+  subnet_id            = var.private_endpoint_subnet_id
+  resource_id          = azurerm_redis_cache.main.id
+  subresource_names    = ["redisCache"]
+  private_dns_zone_ids = var.private_dns_zone_ids
+  tags                 = var.tags
 }

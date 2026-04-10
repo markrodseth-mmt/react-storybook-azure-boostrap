@@ -56,30 +56,114 @@ module "container_registry" {
   resource_group_name        = azurerm_resource_group.main.name
   sku                        = var.acr_sku
   replication_location       = var.acr_replication_location
-  private_endpoint_subnet_id = module.networking.private_endpoint_subnet_id
-  private_dns_zone_ids       = module.networking.acr_private_dns_zone_ids
+  private_endpoint_subnet_id = module.networking.subnet_ids["private_endpoints"]
+  private_dns_zone_ids       = module.networking.private_dns_zone_ids["acr"]
   tags                       = local.common_tags
 }
 
-# ─── App Services ─────────────────────────────────────────────────────────────
+# ─── Azure Front Door Profile ────────────────────────────────────────────────
+# Created at root to break the dependency cycle between AFD and App Services.
 
-module "app_services" {
-  source = "./modules/app_services"
+resource "azurerm_cdn_frontdoor_profile" "main" {
+  name                = "afd-${local.prefix}"
+  resource_group_name = azurerm_resource_group.main.name
+  sku_name            = "Premium_AzureFrontDoor"
+  tags                = local.common_tags
+}
+
+# ─── App Service Plans ────────────────────────────────────────────────────────
+
+resource "azurerm_service_plan" "nginx" {
+  name                = "asp-${local.prefix}-nginx"
+  location            = var.location
+  resource_group_name = azurerm_resource_group.main.name
+  os_type             = "Linux"
+  sku_name            = var.nginx_app_service_sku
+  tags                = local.common_tags
+}
+
+resource "azurerm_service_plan" "apps" {
+  name                = "asp-${local.prefix}-apps"
+  location            = var.location
+  resource_group_name = azurerm_resource_group.main.name
+  os_type             = "Linux"
+  sku_name            = var.app_service_sku
+  tags                = local.common_tags
+}
+
+# ─── Web Apps (using standardised linux_web_app module) ───────────────────────
+# Each app only specifies what makes it unique: name, image, plan, and any
+# extra app settings. All security/networking/monitoring defaults are baked
+# into the module.
+
+module "nginx" {
+  source = "./modules/linux_web_app"
 
   prefix                                 = local.prefix
+  name                                   = "nginx"
   suffix                                 = local.suffix
   location                               = var.location
   resource_group_name                    = azurerm_resource_group.main.name
-  app_service_sku                        = var.app_service_sku
-  nginx_sku                              = var.nginx_app_service_sku
-  vnet_integration_subnet_id             = module.networking.app_services_subnet_id
-  private_endpoint_subnet_id             = module.networking.private_endpoint_subnet_id
+  service_plan_id                        = azurerm_service_plan.nginx.id
+  docker_image                           = "nginx:latest"
   acr_login_server                       = module.container_registry.login_server
   acr_id                                 = module.container_registry.id
-  private_dns_zone_ids                   = module.networking.app_service_private_dns_zone_ids
+  vnet_integration_subnet_id             = module.networking.subnet_ids["app_services"]
+  private_endpoint_subnet_id             = module.networking.subnet_ids["private_endpoints"]
+  private_dns_zone_ids                   = module.networking.private_dns_zone_ids["app_service"]
   front_door_id                          = azurerm_cdn_frontdoor_profile.main.resource_guid
   application_insights_connection_string = module.monitoring.application_insights_connection_string
   tags                                   = local.common_tags
+}
+
+module "frontend" {
+  source = "./modules/linux_web_app"
+
+  prefix                                 = local.prefix
+  name                                   = "frontend"
+  suffix                                 = local.suffix
+  location                               = var.location
+  resource_group_name                    = azurerm_resource_group.main.name
+  service_plan_id                        = azurerm_service_plan.apps.id
+  docker_image                           = "frontend:latest"
+  acr_login_server                       = module.container_registry.login_server
+  acr_id                                 = module.container_registry.id
+  vnet_integration_subnet_id             = module.networking.subnet_ids["app_services"]
+  private_endpoint_subnet_id             = module.networking.subnet_ids["private_endpoints"]
+  private_dns_zone_ids                   = module.networking.private_dns_zone_ids["app_service"]
+  front_door_id                          = azurerm_cdn_frontdoor_profile.main.resource_guid
+  application_insights_connection_string = module.monitoring.application_insights_connection_string
+  tags                                   = local.common_tags
+
+  extra_app_settings = {
+    PORT = "8080"
+    # Storyblok credentials managed out-of-band via: ./cli/infra secrets:set <env>
+  }
+}
+
+module "backend" {
+  source = "./modules/linux_web_app"
+
+  prefix                                 = local.prefix
+  name                                   = "backend"
+  suffix                                 = local.suffix
+  location                               = var.location
+  resource_group_name                    = azurerm_resource_group.main.name
+  service_plan_id                        = azurerm_service_plan.apps.id
+  docker_image                           = "backend-api:latest"
+  acr_login_server                       = module.container_registry.login_server
+  acr_id                                 = module.container_registry.id
+  vnet_integration_subnet_id             = module.networking.subnet_ids["app_services"]
+  private_endpoint_subnet_id             = module.networking.subnet_ids["private_endpoints"]
+  private_dns_zone_ids                   = module.networking.private_dns_zone_ids["app_service"]
+  front_door_id                          = azurerm_cdn_frontdoor_profile.main.resource_guid
+  application_insights_connection_string = module.monitoring.application_insights_connection_string
+  tags                                   = local.common_tags
+
+  extra_app_settings = {
+    ASPNETCORE_ENVIRONMENT = "Production"
+    # Redis and Search connection strings injected post-deploy via Key Vault references
+  }
 }
 
 # ─── Redis ───────────────────────────────────────────────────────────────────
@@ -91,8 +175,8 @@ module "redis" {
   location                   = var.location
   resource_group_name        = azurerm_resource_group.main.name
   redis_sku                  = var.redis_sku
-  private_endpoint_subnet_id = module.networking.private_endpoint_subnet_id
-  private_dns_zone_ids       = module.networking.redis_private_dns_zone_ids
+  private_endpoint_subnet_id = module.networking.subnet_ids["private_endpoints"]
+  private_dns_zone_ids       = module.networking.private_dns_zone_ids["redis"]
   tags                       = local.common_tags
 }
 
@@ -105,8 +189,8 @@ module "search" {
   location                   = var.location
   resource_group_name        = azurerm_resource_group.main.name
   sku                        = var.search_sku
-  private_endpoint_subnet_id = module.networking.private_endpoint_subnet_id
-  private_dns_zone_ids       = module.networking.search_private_dns_zone_ids
+  private_endpoint_subnet_id = module.networking.subnet_ids["private_endpoints"]
+  private_dns_zone_ids       = module.networking.private_dns_zone_ids["search"]
   tags                       = local.common_tags
 }
 
@@ -119,8 +203,8 @@ module "key_vault" {
   location                   = var.location
   resource_group_name        = azurerm_resource_group.main.name
   tenant_id                  = var.tenant_id
-  private_endpoint_subnet_id = module.networking.private_endpoint_subnet_id
-  private_dns_zone_ids       = module.networking.key_vault_private_dns_zone_ids
+  private_endpoint_subnet_id = module.networking.subnet_ids["private_endpoints"]
+  private_dns_zone_ids       = module.networking.private_dns_zone_ids["key_vault"]
   tags                       = local.common_tags
 }
 
@@ -136,7 +220,7 @@ resource "azurerm_role_assignment" "deployer_kv_admin" {
 resource "azurerm_role_assignment" "backend_kv_secrets" {
   scope                = module.key_vault.id
   role_definition_name = "Key Vault Secrets User"
-  principal_id         = module.app_services.backend_identity_principal_id
+  principal_id         = module.backend.identity_principal_id
 }
 
 # Store secrets in Key Vault for App Service / Function App Key Vault references
@@ -166,33 +250,20 @@ module "function_app" {
   suffix                                 = local.suffix
   location                               = var.location
   resource_group_name                    = azurerm_resource_group.main.name
-  vnet_integration_subnet_id             = module.networking.functions_subnet_id
-  private_endpoint_subnet_id             = module.networking.private_endpoint_subnet_id
+  vnet_integration_subnet_id             = module.networking.subnet_ids["functions"]
+  private_endpoint_subnet_id             = module.networking.subnet_ids["private_endpoints"]
   acr_login_server                       = module.container_registry.login_server
   acr_id                                 = module.container_registry.id
   search_endpoint                        = module.search.endpoint
-  search_key                             = module.search.primary_key
-  redis_connection_string                = module.redis.primary_connection_string
-  private_dns_zone_ids                   = module.networking.function_private_dns_zone_ids
-  storage_blob_private_dns_zone_ids      = module.networking.storage_blob_private_dns_zone_ids
-  storage_queue_private_dns_zone_ids     = module.networking.storage_queue_private_dns_zone_ids
-  storage_table_private_dns_zone_ids     = module.networking.storage_table_private_dns_zone_ids
-  storage_file_private_dns_zone_ids      = module.networking.storage_file_private_dns_zone_ids
+  private_dns_zone_ids                   = module.networking.private_dns_zone_ids["function_app"]
+  storage_blob_private_dns_zone_ids      = module.networking.private_dns_zone_ids["storage_blob"]
+  storage_queue_private_dns_zone_ids     = module.networking.private_dns_zone_ids["storage_queue"]
+  storage_table_private_dns_zone_ids     = module.networking.private_dns_zone_ids["storage_table"]
+  storage_file_private_dns_zone_ids      = module.networking.private_dns_zone_ids["storage_file"]
   key_vault_id                           = module.key_vault.id
   key_vault_uri                          = module.key_vault.uri
   application_insights_connection_string = module.monitoring.application_insights_connection_string
   tags                                   = local.common_tags
-}
-
-# ─── Azure Front Door Profile (created first to break dependency cycle) ───────
-# The profile resource_guid is needed by App Service access restrictions,
-# while the full Front Door module needs App Service hostnames for origins.
-
-resource "azurerm_cdn_frontdoor_profile" "main" {
-  name                = "afd-${local.prefix}"
-  resource_group_name = azurerm_resource_group.main.name
-  sku_name            = "Premium_AzureFrontDoor"
-  tags                = local.common_tags
 }
 
 # ─── Azure Front Door ─────────────────────────────────────────────────────────
@@ -207,9 +278,9 @@ module "front_door" {
 
   front_door_profile_id = azurerm_cdn_frontdoor_profile.main.id
 
-  nginx_origin_hostname    = module.app_services.nginx_hostname
-  frontend_origin_hostname = module.app_services.frontend_hostname
-  backend_origin_hostname  = module.app_services.backend_hostname
+  nginx_origin_hostname    = module.nginx.hostname
+  frontend_origin_hostname = module.frontend.hostname
+  backend_origin_hostname  = module.backend.hostname
 
   legacy_site_hostname = var.legacy_site_hostname
   legacy_site_patterns = var.legacy_site_patterns
@@ -222,16 +293,43 @@ module "front_door" {
 module "monitoring" {
   source = "./modules/monitoring"
 
-  prefix                  = local.prefix
-  location                = var.location
-  resource_group_name     = azurerm_resource_group.main.name
-  front_door_profile_id   = azurerm_cdn_frontdoor_profile.main.id
-  redis_id                = module.redis.id
-  search_id               = module.search.id
-  key_vault_id            = module.key_vault.id
-  nginx_app_service_id    = module.app_services.nginx_id
-  frontend_app_service_id = module.app_services.frontend_id
-  backend_app_service_id  = module.app_services.backend_id
-  function_app_id         = module.function_app.id
-  tags                    = local.common_tags
+  prefix              = local.prefix
+  location            = var.location
+  resource_group_name = azurerm_resource_group.main.name
+  tags                = local.common_tags
+
+  diagnostic_targets = {
+    front-door = {
+      resource_id    = azurerm_cdn_frontdoor_profile.main.id
+      log_categories = ["FrontDoorAccessLog", "FrontDoorHealthProbeLog", "FrontDoorWebApplicationFirewallLog"]
+    }
+    redis = {
+      resource_id    = module.redis.id
+      log_categories = ["ConnectedClientList"]
+    }
+    search = {
+      resource_id    = module.search.id
+      log_categories = ["OperationLogs"]
+    }
+    key-vault = {
+      resource_id    = module.key_vault.id
+      log_categories = ["AuditEvent"]
+    }
+    nginx = {
+      resource_id    = module.nginx.id
+      log_categories = ["AppServiceHTTPLogs", "AppServiceConsoleLogs", "AppServiceAppLogs"]
+    }
+    frontend = {
+      resource_id    = module.frontend.id
+      log_categories = ["AppServiceHTTPLogs", "AppServiceConsoleLogs", "AppServiceAppLogs"]
+    }
+    backend = {
+      resource_id    = module.backend.id
+      log_categories = ["AppServiceHTTPLogs", "AppServiceConsoleLogs", "AppServiceAppLogs"]
+    }
+    function-app = {
+      resource_id    = module.function_app.id
+      log_categories = ["FunctionAppLogs"]
+    }
+  }
 }

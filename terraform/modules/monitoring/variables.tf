@@ -1,44 +1,36 @@
-variable "prefix" { type = string }
-variable "location" { type = string }
-variable "resource_group_name" { type = string }
-variable "tags" { type = map(string) }
-
-variable "front_door_profile_id" {
+variable "prefix" {
   type        = string
-  description = "Azure Front Door profile ID for diagnostic settings"
+  description = "Resource name prefix (project-environment)"
 }
 
-variable "redis_id" {
+variable "location" {
   type        = string
-  description = "Redis Cache resource ID for diagnostic settings"
+  description = "Azure region"
 }
 
-variable "search_id" {
+variable "resource_group_name" {
   type        = string
-  description = "Azure AI Search resource ID for diagnostic settings"
+  description = "Resource group to deploy into"
 }
 
-variable "key_vault_id" {
-  type        = string
-  description = "Key Vault resource ID for diagnostic settings"
+variable "tags" {
+  type        = map(string)
+  description = "Tags applied to all resources"
 }
 
-variable "nginx_app_service_id" {
-  type        = string
-  description = "NGINX App Service resource ID for diagnostic settings"
-}
-
-variable "frontend_app_service_id" {
-  type        = string
-  description = "Frontend App Service resource ID for diagnostic settings"
-}
-
-variable "backend_app_service_id" {
-  type        = string
-  description = "Backend App Service resource ID for diagnostic settings"
-}
-
-variable "function_app_id" {
-  type        = string
-  description = "Function App resource ID for diagnostic settings"
+variable "diagnostic_targets" {
+  type = map(object({
+    resource_id    = string
+    log_categories = list(string)
+  }))
+  description = <<-EOT
+    Map of resources to monitor. Each key becomes the diagnostic setting name suffix.
+    Example:
+      diagnostic_targets = {
+        redis = {
+          resource_id    = module.redis.id
+          log_categories = ["ConnectedClientList"]
+        }
+      }
+  EOT
 }

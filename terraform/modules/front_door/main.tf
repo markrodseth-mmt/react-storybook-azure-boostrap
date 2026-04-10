@@ -32,10 +32,19 @@ resource "azurerm_cdn_frontdoor_endpoint" "main" {
   tags                     = var.tags
 }
 
-# ─── Origin Groups ────────────────────────────────────────────────────────────
+# ─── Origin Groups & Origins (DRY via for_each) ──────────────────────────────
 
-resource "azurerm_cdn_frontdoor_origin_group" "nginx" {
-  name                     = "og-nginx"
+locals {
+  origins = {
+    nginx    = { hostname = var.nginx_origin_hostname }
+    frontend = { hostname = var.frontend_origin_hostname }
+    backend  = { hostname = var.backend_origin_hostname }
+  }
+}
+
+resource "azurerm_cdn_frontdoor_origin_group" "origins" {
+  for_each                 = local.origins
+  name                     = "og-${each.key}"
   cdn_frontdoor_profile_id = var.front_door_profile_id
 
   load_balancing {
@@ -52,50 +61,13 @@ resource "azurerm_cdn_frontdoor_origin_group" "nginx" {
   }
 }
 
-resource "azurerm_cdn_frontdoor_origin_group" "frontend" {
-  name                     = "og-frontend"
-  cdn_frontdoor_profile_id = var.front_door_profile_id
-
-  load_balancing {
-    additional_latency_in_milliseconds = 50
-    sample_size                        = 4
-    successful_samples_required        = 3
-  }
-
-  health_probe {
-    interval_in_seconds = 30
-    path                = "/health"
-    protocol            = "Https"
-    request_type        = "HEAD"
-  }
-}
-
-resource "azurerm_cdn_frontdoor_origin_group" "backend" {
-  name                     = "og-backend"
-  cdn_frontdoor_profile_id = var.front_door_profile_id
-
-  load_balancing {
-    additional_latency_in_milliseconds = 50
-    sample_size                        = 4
-    successful_samples_required        = 3
-  }
-
-  health_probe {
-    interval_in_seconds = 30
-    path                = "/health"
-    protocol            = "Https"
-    request_type        = "HEAD"
-  }
-}
-
-# ─── Origins ──────────────────────────────────────────────────────────────────
-
-resource "azurerm_cdn_frontdoor_origin" "nginx" {
-  name                           = "origin-nginx"
-  cdn_frontdoor_origin_group_id  = azurerm_cdn_frontdoor_origin_group.nginx.id
+resource "azurerm_cdn_frontdoor_origin" "origins" {
+  for_each                       = local.origins
+  name                           = "origin-${each.key}"
+  cdn_frontdoor_origin_group_id  = azurerm_cdn_frontdoor_origin_group.origins[each.key].id
   enabled                        = true
-  host_name                      = var.nginx_origin_hostname
-  origin_host_header             = var.nginx_origin_hostname
+  host_name                      = each.value.hostname
+  origin_host_header             = each.value.hostname
   priority                       = 1
   weight                         = 1000
   certificate_name_check_enabled = true
@@ -103,33 +75,7 @@ resource "azurerm_cdn_frontdoor_origin" "nginx" {
   http_port                      = 80
 }
 
-resource "azurerm_cdn_frontdoor_origin" "frontend" {
-  name                           = "origin-frontend"
-  cdn_frontdoor_origin_group_id  = azurerm_cdn_frontdoor_origin_group.frontend.id
-  enabled                        = true
-  host_name                      = var.frontend_origin_hostname
-  origin_host_header             = var.frontend_origin_hostname
-  priority                       = 1
-  weight                         = 1000
-  certificate_name_check_enabled = true
-  https_port                     = 443
-  http_port                      = 80
-}
-
-resource "azurerm_cdn_frontdoor_origin" "backend" {
-  name                           = "origin-backend"
-  cdn_frontdoor_origin_group_id  = azurerm_cdn_frontdoor_origin_group.backend.id
-  enabled                        = true
-  host_name                      = var.backend_origin_hostname
-  origin_host_header             = var.backend_origin_hostname
-  priority                       = 1
-  weight                         = 1000
-  certificate_name_check_enabled = true
-  https_port                     = 443
-  http_port                      = 80
-}
-
-# ─── Legacy Site Origin (Old Site Reverse Proxy) ─────────────────────────────
+# ─── Legacy Site Origin (conditional) ────────────────────────────────────────
 
 resource "azurerm_cdn_frontdoor_origin_group" "legacy" {
   count                    = var.legacy_site_hostname != "" ? 1 : 0
@@ -164,6 +110,13 @@ resource "azurerm_cdn_frontdoor_origin" "legacy" {
   http_port                      = 80
 }
 
+# ─── Rule Sets ────────────────────────────────────────────────────────────────
+
+resource "azurerm_cdn_frontdoor_rule_set" "main" {
+  name                     = "ruleset${replace(var.prefix, "-", "")}"
+  cdn_frontdoor_profile_id = var.front_door_profile_id
+}
+
 # ─── Routes ───────────────────────────────────────────────────────────────────
 # Order matters: more-specific patterns must be defined before the catch-all.
 
@@ -186,8 +139,8 @@ resource "azurerm_cdn_frontdoor_route" "legacy" {
 resource "azurerm_cdn_frontdoor_route" "api" {
   name                          = "route-api"
   cdn_frontdoor_endpoint_id     = azurerm_cdn_frontdoor_endpoint.main.id
-  cdn_frontdoor_origin_group_id = azurerm_cdn_frontdoor_origin_group.backend.id
-  cdn_frontdoor_origin_ids      = [azurerm_cdn_frontdoor_origin.backend.id]
+  cdn_frontdoor_origin_group_id = azurerm_cdn_frontdoor_origin_group.origins["backend"].id
+  cdn_frontdoor_origin_ids      = [azurerm_cdn_frontdoor_origin.origins["backend"].id]
   enabled                       = true
 
   forwarding_protocol    = "HttpsOnly"
@@ -201,8 +154,8 @@ resource "azurerm_cdn_frontdoor_route" "api" {
 resource "azurerm_cdn_frontdoor_route" "nginx_redirects" {
   name                          = "route-nginx-redirects"
   cdn_frontdoor_endpoint_id     = azurerm_cdn_frontdoor_endpoint.main.id
-  cdn_frontdoor_origin_group_id = azurerm_cdn_frontdoor_origin_group.nginx.id
-  cdn_frontdoor_origin_ids      = [azurerm_cdn_frontdoor_origin.nginx.id]
+  cdn_frontdoor_origin_group_id = azurerm_cdn_frontdoor_origin_group.origins["nginx"].id
+  cdn_frontdoor_origin_ids      = [azurerm_cdn_frontdoor_origin.origins["nginx"].id]
   enabled                       = true
 
   forwarding_protocol    = "HttpsOnly"
@@ -216,8 +169,8 @@ resource "azurerm_cdn_frontdoor_route" "nginx_redirects" {
 resource "azurerm_cdn_frontdoor_route" "frontend" {
   name                          = "route-frontend"
   cdn_frontdoor_endpoint_id     = azurerm_cdn_frontdoor_endpoint.main.id
-  cdn_frontdoor_origin_group_id = azurerm_cdn_frontdoor_origin_group.frontend.id
-  cdn_frontdoor_origin_ids      = [azurerm_cdn_frontdoor_origin.frontend.id]
+  cdn_frontdoor_origin_group_id = azurerm_cdn_frontdoor_origin_group.origins["frontend"].id
+  cdn_frontdoor_origin_ids      = [azurerm_cdn_frontdoor_origin.origins["frontend"].id]
   enabled                       = true
 
   forwarding_protocol    = "HttpsOnly"
@@ -233,13 +186,6 @@ resource "azurerm_cdn_frontdoor_route" "frontend" {
     compression_enabled           = true
     content_types_to_compress     = ["text/html", "text/css", "application/javascript"]
   }
-}
-
-# ─── Rule Sets ────────────────────────────────────────────────────────────────
-
-resource "azurerm_cdn_frontdoor_rule_set" "main" {
-  name                     = "ruleset${replace(var.prefix, "-", "")}"
-  cdn_frontdoor_profile_id = var.front_door_profile_id
 }
 
 # ─── Security Policy (WAF attachment) ────────────────────────────────────────
